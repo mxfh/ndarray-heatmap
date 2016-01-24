@@ -24,7 +24,7 @@ Renders ndarray into a canvas.
         [0, 1, 1, 1, 1, 0],
         [0, 0, 0, 0, 0, 0]
     ]);
-    var renderer = heatmap
+    var renderer = heatmap()
         .data(array)
         .colorRange(['#000000', '#FFFFFF']);
 
