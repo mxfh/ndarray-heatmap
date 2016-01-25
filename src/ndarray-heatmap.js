@@ -13,7 +13,7 @@ const renderToCanvas = cwise({
   body: function(i, value, imgArray, colors, min, max, imgWidth) {
     let colorIndex = Math.round((value - min) / (max - min) * (colors.length - 1));
     let {r, g, b, a} = colors[colorIndex];
-    let base = (i[1] * imgWidth + i[0]) * 4;
+    let base = (i[0] * imgWidth + i[1]) * 4;
     imgArray[base] = r;
     imgArray[++base] = g;
     imgArray[++base] = b;

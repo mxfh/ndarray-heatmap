@@ -95,7 +95,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var b = _colors$colorIndex.b;
 	    var a = _colors$colorIndex.a;
 	
-	    var base = (i[1] * imgWidth + i[0]) * 4;
+	    var base = (i[0] * imgWidth + i[1]) * 4;
 	    imgArray[base] = r;
 	    imgArray[++base] = g;
 	    imgArray[++base] = b;
