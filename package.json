@@ -1,7 +1,7 @@
 {
   "name": "ndarray-heatmap",
   "version": "0.1.1",
-  "description": "Render ndarray into a canvas",
+  "description": "Renders ndarray into a canvas",
   "main": "dist/ndarray-heatmap.js",
   "scripts": {
     "test": "gulp",
