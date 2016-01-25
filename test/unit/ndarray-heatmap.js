@@ -14,6 +14,15 @@ describe('heatmap', () => {
     expect(unpack(hm.data())).to.deep.equal([[1, 2], [3, 4]]);
   });
 
+  it('should provide domain accessor', () => {
+    // default value
+    expect(hm.domain()).to.equal(null);
+
+    // setter and getter
+    expect(hm.domain([0, 10])).to.equal(hm);
+    expect(hm.domain()).to.deep.equal([0, 10]);
+  });
+
   it('should provide data accessor', () => {
     // default value
     expect(unpack(hm.data())).to.deep.equal([[0]]);

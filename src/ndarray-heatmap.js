@@ -24,6 +24,7 @@ const renderToCanvas = cwise({
 function heatmap() {
   let data = ndarray(new Float64Array([0]), [1, 1]);
   let colorSteps = 256;
+  let domain = null;
   let colorRange = ['#000000', '#FFFFFF'];
 
   function render(_) {
@@ -34,7 +35,7 @@ function heatmap() {
     let ctx = canvas.getContext('2d');
     let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     let imgArray = imgData.data;
-    let [min, max] = extent(data.data);
+    let [min, max] = domain || extent(data.data);
     let colorScale = interpolateLab(...colorRange);
     let colors = [];
     for(let i = 0; i < colorSteps; ++i) {
@@ -59,6 +60,10 @@ function heatmap() {
 
   render.colorSteps = function(_) {
     return arguments.length ? (colorSteps = _, render) : colorSteps;
+  }
+
+  render.domain = function(_) {
+    return arguments.length ? (domain = _, render) : domain;
   }
 
   render.colorRange = function(_) {

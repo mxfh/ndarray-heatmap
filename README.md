@@ -37,7 +37,7 @@ Plain old javascript:
 
 ES6 with ndarray:
 
-    import { heatmap } from 'ndarray-heatmap';
+    import heatmap from 'ndarray-heatmap';
     import pack from 'ndarray-pack';
 
     var array = pack([
