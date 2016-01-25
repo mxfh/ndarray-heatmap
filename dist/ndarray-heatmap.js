@@ -106,6 +106,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	function heatmap() {
 	  var data = (0, _ndarray2.default)(new Float64Array([0]), [1, 1]);
 	  var colorSteps = 256;
+	  var domain = null;
 	  var colorRange = ['#000000', '#FFFFFF'];
 	
 	  function render(_) {
@@ -117,12 +118,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 	    var imgArray = imgData.data;
 	
-	    var _extent = (0, _d3Array.extent)(data.data);
+	    var _ref = domain || (0, _d3Array.extent)(data.data);
 	
-	    var _extent2 = _slicedToArray(_extent, 2);
+	    var _ref2 = _slicedToArray(_ref, 2);
 	
-	    var min = _extent2[0];
-	    var max = _extent2[1];
+	    var min = _ref2[0];
+	    var max = _ref2[1];
 	
 	    var colorScale = _d3Interpolate.interpolateLab.apply(undefined, _toConsumableArray(colorRange));
 	    var colors = [];
@@ -148,6 +149,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	  render.colorSteps = function (_) {
 	    return arguments.length ? (colorSteps = _, render) : colorSteps;
+	  };
+	
+	  render.domain = function (_) {
+	    return arguments.length ? (domain = _, render) : domain;
 	  };
 	
 	  render.colorRange = function (_) {
