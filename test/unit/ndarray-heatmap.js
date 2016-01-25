@@ -1,4 +1,4 @@
-import heatmap from '../../src/ndarray-heatmap';
+import { heatmap } from '../../src/ndarray-heatmap';
 import pack from 'ndarray-pack';
 import unpack from 'ndarray-unpack';
 
@@ -7,6 +7,11 @@ describe('heatmap', () => {
 
   beforeEach(() => {
     hm = heatmap();
+  });
+
+  it('should accept plain JS array', () => {
+    hm.data([[1, 2], [3, 4]]);
+    expect(unpack(hm.data())).to.deep.equal([[1, 2], [3, 4]]);
   });
 
   it('should provide data accessor', () => {

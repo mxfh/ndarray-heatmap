@@ -1,4 +1,5 @@
 import ndarray from 'ndarray';
+import pack from 'ndarray-pack';
 import cwise from 'cwise';
 import { extent } from 'd3-array';
 import { interpolateLab } from 'd3-interpolate';
@@ -20,7 +21,7 @@ const renderToCanvas = cwise({
   }
 });
 
-export default function heatmap() {
+function heatmap() {
   let data = ndarray(new Float64Array([0]), [1, 1]);
   let colorSteps = 256;
   let colorRange = ['#000000', '#FFFFFF'];
@@ -48,6 +49,9 @@ export default function heatmap() {
   render.data = function(_) {
     if(!arguments.length) return data;
 
+    // Convert plain JS array into ndarray
+    _ = _.shape ? _ : pack(_);
+
     if(_.shape.length !== 2) throw new Error(`Invalid rank: ${_.shape.length}`);
     data = _;
     return render;
@@ -64,3 +68,6 @@ export default function heatmap() {
   return render;
 }
 
+export {
+  heatmap
+};

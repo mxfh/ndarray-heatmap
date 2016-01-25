@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ndarray-heatmap demo</title>
+    <script src="dist/ndarray-heatmap.min.js"></script>
+    <script>
+    window.addEventListener('load', function() {
+        var shape = [100, 100];
+        var data = new Array(shape[0]);
+        for(var i = 0; i < shape[0]; ++i) {
+            data[i] = new Array(shape[1]);
+            for(var j = 0; j < shape[1]; ++j) {
+                data[i][j] = j * shape[0] + i;
+            }
+        }
+
+        var renderer = heatmap.heatmap()
+            .data(data)
+            .colorRange(['white', 'red']);
+        var canvas = renderer();
+        document.body.appendChild(canvas);
+    });
+    </script>
+</head>
+<body>
+
+</body>
+</html>
