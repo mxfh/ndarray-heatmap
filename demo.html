@@ -14,10 +14,17 @@
                 data[i][j] = j * shape[0] + i;
             }
         }
-
         var renderer = heatmap.heatmap()
             .data(data)
-            .colorRange(['white', 'red']);
+            .colorSteps(3)
+            .colorRange(
+                    // ColorBrewer RdYlBu 3
+                    // be careful with multi-hue scales
+                    // use only predefined stops from color brewer
+                    // https://vis4.net/blog/posts/mastering-multi-hued-color-scales/
+              ["rgb(252,141,89)", "rgb(255,255,191)", "rgb(145,191,219)"]
+            )
+            ;
         var canvas = renderer();
         document.body.appendChild(canvas);
     });

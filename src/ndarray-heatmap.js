@@ -3,6 +3,7 @@ import pack from 'ndarray-pack';
 import cwise from 'cwise';
 import { extent } from 'd3-array';
 import { interpolateLab } from 'd3-interpolate';
+import { scaleLinear } from 'd3-scale';
 import { rgb } from 'd3-color';
 
 const renderToCanvas = cwise({
@@ -27,6 +28,29 @@ function heatmap() {
   let domain = null;
   let colorRange = ['#000000', '#FFFFFF'];
 
+  function makeColorScale(range,steps) {
+    if (range.length >= 2) {
+      let colors = [];
+      let stops = [];
+      let l = range.length;
+      let s = steps - 1;
+      for (let i = 0; i < l; i++) {
+        stops.push((s) * i / (l - 1));
+      }
+      console.log(range.length, range,l,steps,stops);
+      let colorScale = scaleLinear()
+        .domain(stops)
+        .range(range)
+        .interpolate(interpolateLab);
+      for (let i = 0; i < steps; ++i) {
+        colors.push(rgb(colorScale(i)));
+      }
+      return colors;
+    } else {
+      return false;
+    }
+  }
+
   function render(_) {
     let canvas = _ || document.createElement('canvas');
     canvas.width = data.shape[1];
@@ -36,14 +60,14 @@ function heatmap() {
     let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     let imgArray = imgData.data;
     let [min, max] = domain || extent(data.data);
-    let colorScale = interpolateLab(...colorRange);
-    let colors = [];
-    for(let i = 0; i < colorSteps; ++i) {
-      colors.push(rgb(colorScale(i / (colorSteps - 1))));
+    let colors = makeColorScale(colorRange,colorSteps);
+    if (colors === false) {
+      console.error('specify at least two colors', colorRange);
+      colors = makeColorScale(['#000000', '#FFFFFF'],colorSteps);
     }
+    console.log(colors.length,colors);
     renderToCanvas(data, imgArray, colors, min, max, canvas.width);
     ctx.putImageData(imgData, 0, 0);
-
     return canvas;
   }
 
