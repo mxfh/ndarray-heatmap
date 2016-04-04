@@ -37,7 +37,6 @@ function heatmap() {
       for (let i = 0; i < l; i++) {
         stops.push((s) * i / (l - 1));
       }
-      console.log(range.length, range,l,steps,stops);
       let colorScale = scaleLinear()
         .domain(stops)
         .range(range)
@@ -55,7 +54,6 @@ function heatmap() {
     let canvas = _ || document.createElement('canvas');
     canvas.width = data.shape[1];
     canvas.height = data.shape[0];
-
     let ctx = canvas.getContext('2d');
     let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     let imgArray = imgData.data;
@@ -65,7 +63,6 @@ function heatmap() {
       console.error('specify at least two colors', colorRange);
       colors = makeColorScale(['#000000', '#FFFFFF'],colorSteps);
     }
-    console.log(colors.length,colors);
     renderToCanvas(data, imgArray, colors, min, max, canvas.width);
     ctx.putImageData(imgData, 0, 0);
     return canvas;

@@ -118,7 +118,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	      for (var i = 0; i < l; i++) {
 	        stops.push(s * i / (l - 1));
 	      }
-	      console.log(range.length, range, l, steps, stops);
 	      var colorScale = (0, _d3Scale.scaleLinear)().domain(stops).range(range).interpolate(_d3Interpolate.interpolateLab);
 	      for (var _i = 0; _i < steps; ++_i) {
 	        colors.push((0, _d3Color.rgb)(colorScale(_i)));
@@ -133,7 +132,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var canvas = _ || document.createElement('canvas');
 	    canvas.width = data.shape[1];
 	    canvas.height = data.shape[0];
-	
 	    var ctx = canvas.getContext('2d');
 	    var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 	    var imgArray = imgData.data;
@@ -150,7 +148,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	      console.error('specify at least two colors', colorRange);
 	      colors = makeColorScale(['#000000', '#FFFFFF'], colorSteps);
 	    }
-	    console.log(colors.length, colors);
 	    renderToCanvas(data, imgArray, colors, min, max, canvas.width);
 	    ctx.putImageData(imgData, 0, 0);
 	    return canvas;
