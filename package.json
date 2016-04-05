@@ -63,8 +63,8 @@
   "dependencies": {
     "cwise": "^1.0.8",
     "d3-array": "^0.7.0",
-    "d3-color": "^0.3.3",
-    "d3-interpolate": "^0.4.0",
+    "d3-color": "^0.4.2",
+    "d3-interpolate": "^0.7.0",
     "d3-scale": "^0.6.4",
     "ndarray": "^1.0.18",
     "ndarray-pack": "^1.2.0"

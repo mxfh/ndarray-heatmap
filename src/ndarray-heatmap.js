@@ -6,21 +6,16 @@ import { interpolateLab } from 'd3-interpolate';
 import { scaleLinear } from 'd3-scale';
 import { rgb } from 'd3-color';
 
-const renderToCanvas = cwise({
-  args: [
-    'index', 'array',
-    'scalar', 'scalar', 'scalar', 'scalar', 'scalar'
-  ],
-  body: function(i, value, imgArray, colors, min, max, imgWidth) {
-    let colorIndex = Math.round((value - min) / (max - min) * (colors.length - 1));
-    let {r, g, b, a} = colors[colorIndex];
-    let base = (i[0] * imgWidth + i[1]) * 4;
-    imgArray[base] = r;
-    imgArray[++base] = g;
-    imgArray[++base] = b;
-    imgArray[++base] = a || 255;
+function renderToCanvas(ndArr, imgArray, colorTable, l, min, range, imgWidth) {
+    for(let y = 0; y<ndArr.shape[0]; ++y) {
+      let yIndex = imgWidth * y;
+    for(let x = 0; x<ndArr.shape[1]; ++x) {
+      let norm = ndArr.data[yIndex+x] - min;
+      let colorIndex = ~~((norm / range) * l);
+      imgArray[yIndex + x] = colorTable[colorIndex];
+    }
   }
-});
+}
 
 function heatmap() {
   let data = ndarray(new Float64Array([0]), [1, 1]);
@@ -50,21 +45,55 @@ function heatmap() {
     }
   }
 
+  function buildColorTable(colors) {
+    var typedArr = new Uint32Array(colors.length);
+    colors.forEach(function(c,i) {
+      let {r, g, b, opacity} = c;
+      let a = (opacity === undefined ? 1 : opacity) * 255;
+      let byteValue32 =
+        (a << 24) |
+        (b << 16) |
+        (g << 8) |
+        r ;
+      typedArr[i]= byteValue32;
+    });
+    return typedArr;
+  }
+
   function render(_) {
     let canvas = _ || document.createElement('canvas');
     canvas.width = data.shape[1];
     canvas.height = data.shape[0];
     let ctx = canvas.getContext('2d');
-    let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    let imgArray = imgData.data;
+
+    let imgData = ctx.createImageData(canvas.width, canvas.height);
+
+    let pixels = canvas.width * canvas.height;
+
+    let buf = new ArrayBuffer(pixels * 4);
+    let buf8 = new Uint8ClampedArray(buf);
+    let buf32 = new Uint32Array(buf);
+
     let [min, max] = domain || extent(data.data);
+
     let colors = makeColorScale(colorRange,colorSteps);
+
     if (colors === false) {
       console.error('specify at least two colors', colorRange);
       colors = makeColorScale(['#000000', '#FFFFFF'],colorSteps);
     }
-    renderToCanvas(data, imgArray, colors, min, max, canvas.width);
+
+    let colorTable = buildColorTable(colors);
+
+    // premultiply constant values
+    let range = max - min + 1; // add one for padding to equal spaced
+    let l = colors.length;
+
+    renderToCanvas(data, buf32, colorTable, l, min, range, canvas.width);
+
+    imgData.data.set(buf8);
     ctx.putImageData(imgData, 0, 0);
+
     return canvas;
   }
 

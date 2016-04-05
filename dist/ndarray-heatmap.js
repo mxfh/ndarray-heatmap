@@ -81,27 +81,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	var _d3Scale = __webpack_require__(16);
 	
-	var _d3Color = __webpack_require__(15);
+	var _d3Color = __webpack_require__(23);
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
-	var renderToCanvas = (0, _cwise2.default)({
-	  args: ['index', 'array', 'scalar', 'scalar', 'scalar', 'scalar', 'scalar'],
-	  body: function body(i, value, imgArray, colors, min, max, imgWidth) {
-	    var colorIndex = Math.round((value - min) / (max - min) * (colors.length - 1));
-	    var _colors$colorIndex = colors[colorIndex];
-	    var r = _colors$colorIndex.r;
-	    var g = _colors$colorIndex.g;
-	    var b = _colors$colorIndex.b;
-	    var a = _colors$colorIndex.a;
-	
-	    var base = (i[0] * imgWidth + i[1]) * 4;
-	    imgArray[base] = r;
-	    imgArray[++base] = g;
-	    imgArray[++base] = b;
-	    imgArray[++base] = a || 255;
+	function renderToCanvas(ndArr, imgArray, colorTable, l, min, range, imgWidth) {
+	  for (var y = 0; y < ndArr.shape[0]; ++y) {
+	    var yIndex = imgWidth * y;
+	    for (var x = 0; x < ndArr.shape[1]; ++x) {
+	      var norm = ndArr.data[yIndex + x] - min;
+	      var colorIndex = ~ ~(norm / range * l);
+	      imgArray[yIndex + x] = colorTable[colorIndex];
+	    }
 	  }
-	});
+	}
 	
 	function heatmap() {
 	  var data = (0, _ndarray2.default)(new Float64Array([0]), [1, 1]);
@@ -128,13 +121,34 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 	  }
 	
+	  function buildColorTable(colors) {
+	    var typedArr = new Uint32Array(colors.length);
+	    colors.forEach(function (c, i) {
+	      var r = c.r;
+	      var g = c.g;
+	      var b = c.b;
+	      var opacity = c.opacity;
+	
+	      var a = (opacity === undefined ? 1 : opacity) * 255;
+	      var byteValue32 = a << 24 | b << 16 | g << 8 | r;
+	      typedArr[i] = byteValue32;
+	    });
+	    return typedArr;
+	  }
+	
 	  function render(_) {
 	    var canvas = _ || document.createElement('canvas');
 	    canvas.width = data.shape[1];
 	    canvas.height = data.shape[0];
 	    var ctx = canvas.getContext('2d');
-	    var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-	    var imgArray = imgData.data;
+	
+	    var imgData = ctx.createImageData(canvas.width, canvas.height);
+	
+	    var pixels = canvas.width * canvas.height;
+	
+	    var buf = new ArrayBuffer(pixels * 4);
+	    var buf8 = new Uint8ClampedArray(buf);
+	    var buf32 = new Uint32Array(buf);
 	
 	    var _ref = domain || (0, _d3Array.extent)(data.data);
 	
@@ -143,13 +157,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var min = _ref2[0];
 	    var max = _ref2[1];
 	
+	
 	    var colors = makeColorScale(colorRange, colorSteps);
+	
 	    if (colors === false) {
 	      console.error('specify at least two colors', colorRange);
 	      colors = makeColorScale(['#000000', '#FFFFFF'], colorSteps);
 	    }
-	    renderToCanvas(data, imgArray, colors, min, max, canvas.width);
+	
+	    var colorTable = buildColorTable(colors);
+	
+	    // premultiply constant values
+	    var range = max - min + 1; // add one for padding to equal spaced
+	    var l = colors.length;
+	
+	    renderToCanvas(data, buf32, colorTable, l, min, range, canvas.width);
+	
+	    imgData.data.set(buf8);
 	    ctx.putImageData(imgData, 0, 0);
+	
 	    return canvas;
 	  }
 	
@@ -5733,25 +5759,64 @@ return /******/ (function(modules) { // webpackBootstrap
 	(function (global, factory) {
 	   true ? factory(exports, __webpack_require__(15)) :
 	  typeof define === 'function' && define.amd ? define(['exports', 'd3-color'], factory) :
-	  (factory((global.d3_interpolate = {}),global.d3_color));
+	  (factory((global.d3_interpolate = global.d3_interpolate || {}),global.d3_color));
 	}(this, function (exports,d3Color) { 'use strict';
 	
-	  function rgb$1(a, b) {
-	    a = d3Color.rgb(a);
-	    b = d3Color.rgb(b);
-	    var ar = a.r,
-	        ag = a.g,
-	        ab = a.b,
-	        br = b.r - ar,
-	        bg = b.g - ag,
-	        bb = b.b - ab;
-	    return function(t) {
-	      a.r = ar + br * t;
-	      a.g = ag + bg * t;
-	      a.b = ab + bb * t;
-	      return a + "";
+	  function constant(x) {
+	    return function() {
+	      return x;
 	    };
 	  }
+	
+	  function linear(a, d) {
+	    return function(t) {
+	      return a + t * d;
+	    };
+	  }
+	
+	  function exponential(a, b, y) {
+	    return a = Math.pow(a, y), b = Math.pow(b, y) - a, y = 1 / y, function(t) {
+	      return Math.pow(a + t * b, y);
+	    };
+	  }
+	
+	  function interpolateHue(a, b) {
+	    var d = b - a;
+	    return d ? linear(a, d > 180 || d < -180 ? d - 360 * Math.round(d / 360) : d) : constant(isNaN(a) ? b : a);
+	  }
+	
+	  function gamma(y) {
+	    return (y = +y) === 1 ? nogamma : function(a, b) {
+	      return b - a ? exponential(a, b, y) : constant(isNaN(a) ? b : a);
+	    };
+	  }
+	
+	  function nogamma(a, b) {
+	    var d = b - a;
+	    return d ? linear(a, d) : constant(isNaN(a) ? b : a);
+	  }
+	
+	  var rgb$1 = (function gamma$$(y) {
+	    var interpolateColor = gamma(y);
+	
+	    function interpolateRgb(start, end) {
+	      var r = interpolateColor((start = d3Color.rgb(start)).r, (end = d3Color.rgb(end)).r),
+	          g = interpolateColor(start.g, end.g),
+	          b = interpolateColor(start.b, end.b),
+	          opacity = interpolateColor(start.opacity, end.opacity);
+	      return function(t) {
+	        start.r = r(t);
+	        start.g = g(t);
+	        start.b = b(t);
+	        start.opacity = opacity(t);
+	        return start + "";
+	      };
+	    }
+	
+	    interpolateRgb.gamma = gamma$$;
+	
+	    return interpolateRgb;
+	  })(1);
 	
 	  // TODO sparse arrays?
 	  function array(a, b) {
@@ -5868,21 +5933,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	          });
 	  }
 	
-	  var values = [
-	    function(a, b) {
-	      var t = typeof b, c;
-	      return (t === "string" ? ((c = d3Color.color(b)) ? (b = c, rgb$1) : string)
-	          : b instanceof d3Color.color ? rgb$1
-	          : Array.isArray(b) ? array
-	          : t === "object" && isNaN(b) ? object
-	          : number)(a, b);
-	    }
-	  ];
-	
 	  function value(a, b) {
-	    var i = values.length, f;
-	    while (--i >= 0 && !(f = values[i](a, b)));
-	    return f;
+	    var t = typeof b, c;
+	    return b == null || t === "boolean" ? constant(b)
+	        : (t === "number" ? number
+	        : t === "string" ? ((c = d3Color.color(b)) ? (b = c, rgb$1) : string)
+	        : b instanceof d3Color.color ? rgb$1
+	        : Array.isArray(b) ? array
+	        : object)(a, b);
 	  }
 	
 	  function round(a, b) {
@@ -5892,107 +5950,121 @@ return /******/ (function(modules) { // webpackBootstrap
 	  }
 	
 	  var rad2deg = 180 / Math.PI;
-	  var identity = {a: 1, b: 0, c: 0, d: 1, e: 0, f: 0};
-	  var g;
-	  // Compute x-scale and normalize the first row.
-	  // Compute shear and make second row orthogonal to first.
-	  // Compute y-scale and normalize the second row.
-	  // Finally, compute the rotation.
-	  function Transform(string) {
-	    if (!g) g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-	    if (string) g.setAttribute("transform", string), t = g.transform.baseVal.consolidate();
 	
-	    var t,
-	        m = t ? t.matrix : identity,
-	        r0 = [m.a, m.b],
-	        r1 = [m.c, m.d],
-	        kx = normalize(r0),
-	        kz = dot(r0, r1),
-	        ky = normalize(combine(r1, r0, -kz)) || 0;
+	  var identity = {
+	    translateX: 0,
+	    translateY: 0,
+	    rotate: 0,
+	    skewX: 0,
+	    scaleX: 1,
+	    scaleY: 1
+	  };
 	
-	    if (r0[0] * r1[1] < r1[0] * r0[1]) {
-	      r0[0] *= -1;
-	      r0[1] *= -1;
-	      kx *= -1;
-	      kz *= -1;
-	    }
+	  function decompose(a, b, c, d, e, f) {
+	    if (a * d === b * c) return null;
 	
-	    this.rotate = (kx ? Math.atan2(r0[1], r0[0]) : Math.atan2(-r1[0], r1[1])) * rad2deg;
-	    this.translate = [m.e, m.f];
-	    this.scale = [kx, ky];
-	    this.skew = ky ? Math.atan2(kz, ky) * rad2deg : 0;
-	  }
+	    var scaleX = Math.sqrt(a * a + b * b);
+	    a /= scaleX, b /= scaleX;
 	
-	  function dot(a, b) {
-	    return a[0] * b[0] + a[1] * b[1];
-	  }
+	    var skewX = a * c + b * d;
+	    c -= a * skewX, d -= b * skewX;
 	
-	  function normalize(a) {
-	    var k = Math.sqrt(dot(a, a));
-	    if (k) a[0] /= k, a[1] /= k;
-	    return k;
-	  }
+	    var scaleY = Math.sqrt(c * c + d * d);
+	    c /= scaleY, d /= scaleY, skewX /= scaleY;
 	
-	  function combine(a, b, k) {
-	    a[0] += k * b[0];
-	    a[1] += k * b[1];
-	    return a;
-	  }
+	    if (a * d < b * c) a = -a, b = -b, skewX = -skewX, scaleX = -scaleX;
 	
-	  function pop(s) {
-	    return s.length ? s.pop() + "," : "";
-	  }
-	
-	  function translate(ta, tb, s, q) {
-	    if (ta[0] !== tb[0] || ta[1] !== tb[1]) {
-	      var i = s.push("translate(", null, ",", null, ")");
-	      q.push({i: i - 4, x: number(ta[0], tb[0])}, {i: i - 2, x: number(ta[1], tb[1])});
-	    } else if (tb[0] || tb[1]) {
-	      s.push("translate(" + tb + ")");
-	    }
-	  }
-	
-	  function rotate(ra, rb, s, q) {
-	    if (ra !== rb) {
-	      if (ra - rb > 180) rb += 360; else if (rb - ra > 180) ra += 360; // shortest path
-	      q.push({i: s.push(pop(s) + "rotate(", null, ")") - 2, x: number(ra, rb)});
-	    } else if (rb) {
-	      s.push(pop(s) + "rotate(" + rb + ")");
-	    }
-	  }
-	
-	  function skew(wa, wb, s, q) {
-	    if (wa !== wb) {
-	      q.push({i: s.push(pop(s) + "skewX(", null, ")") - 2, x: number(wa, wb)});
-	    } else if (wb) {
-	      s.push(pop(s) + "skewX(" + wb + ")");
-	    }
-	  }
-	
-	  function scale(ka, kb, s, q) {
-	    if (ka[0] !== kb[0] || ka[1] !== kb[1]) {
-	      var i = s.push(pop(s) + "scale(", null, ",", null, ")");
-	      q.push({i: i - 4, x: number(ka[0], kb[0])}, {i: i - 2, x: number(ka[1], kb[1])});
-	    } else if (kb[0] !== 1 || kb[1] !== 1) {
-	      s.push(pop(s) + "scale(" + kb + ")");
-	    }
-	  }
-	
-	  function transform(a, b) {
-	    var s = [], // string constants and placeholders
-	        q = []; // number interpolators
-	    a = new Transform(a), b = new Transform(b);
-	    translate(a.translate, b.translate, s, q);
-	    rotate(a.rotate, b.rotate, s, q);
-	    skew(a.skew, b.skew, s, q);
-	    scale(a.scale, b.scale, s, q);
-	    a = b = null; // gc
-	    return function(t) {
-	      var i = -1, n = q.length, o;
-	      while (++i < n) s[(o = q[i]).i] = o.x(t);
-	      return s.join("");
+	    return {
+	      translateX: e,
+	      translateY: f,
+	      rotate: Math.atan2(b, a) * rad2deg,
+	      skewX: Math.atan(skewX) * rad2deg,
+	      scaleX: scaleX,
+	      scaleY: scaleY
 	    };
 	  }
+	
+	  var cssNode;
+	  var cssRoot;
+	  var cssView;
+	  var svgNode;
+	  function parseCss(value) {
+	    if (value === "none") return identity;
+	    if (!cssNode) cssNode = document.createElement("DIV"), cssRoot = document.documentElement, cssView = document.defaultView;
+	    cssNode.style.transform = value;
+	    value = cssView.getComputedStyle(cssRoot.appendChild(cssNode), null).getPropertyValue("transform");
+	    cssRoot.removeChild(cssNode);
+	    var m = value.slice(7, -1).split(",");
+	    return decompose(+m[0], +m[1], +m[2], +m[3], +m[4], +m[5]);
+	  }
+	
+	  function parseSvg(value) {
+	    if (!svgNode) svgNode = document.createElementNS("http://www.w3.org/2000/svg", "g");
+	    svgNode.setAttribute("transform", value == null ? "" : value);
+	    var m = svgNode.transform.baseVal.consolidate().matrix;
+	    return decompose(m.a, m.b, m.c, m.d, m.e, m.f);
+	  }
+	
+	  function interpolateTransform(parse, pxComma, pxParen, degParen) {
+	
+	    function pop(s) {
+	      return s.length ? s.pop() + " " : "";
+	    }
+	
+	    function translate(xa, ya, xb, yb, s, q) {
+	      if (xa !== xb || ya !== yb) {
+	        var i = s.push("translate(", null, pxComma, null, pxParen);
+	        q.push({i: i - 4, x: number(xa, xb)}, {i: i - 2, x: number(ya, yb)});
+	      } else if (xb || yb) {
+	        s.push("translate(" + xb + pxComma + yb + pxParen);
+	      }
+	    }
+	
+	    function rotate(a, b, s, q) {
+	      if (a !== b) {
+	        if (a - b > 180) b += 360; else if (b - a > 180) a += 360; // shortest path
+	        q.push({i: s.push(pop(s) + "rotate(", null, degParen) - 2, x: number(a, b)});
+	      } else if (b) {
+	        s.push(pop(s) + "rotate(" + b + degParen);
+	      }
+	    }
+	
+	    function skewX(a, b, s, q) {
+	      if (a !== b) {
+	        q.push({i: s.push(pop(s) + "skewX(", null, degParen) - 2, x: number(a, b)});
+	      } else if (b) {
+	        s.push(pop(s) + "skewX(" + b + degParen);
+	      }
+	    }
+	
+	    function scale(xa, ya, xb, yb, s, q) {
+	      if (xa !== xb || ya !== yb) {
+	        var i = s.push(pop(s) + "scale(", null, ",", null, ")");
+	        q.push({i: i - 4, x: number(xa, xb)}, {i: i - 2, x: number(ya, yb)});
+	      } else if (xb !== 1 || yb !== 1) {
+	        s.push(pop(s) + "scale(" + xb + "," + yb + ")");
+	      }
+	    }
+	
+	    return function(a, b) {
+	      var s = [], // string constants and placeholders
+	          q = []; // number interpolators
+	      a = parse(a), b = parse(b);
+	      translate(a.translateX, a.translateY, b.translateX, b.translateY, s, q);
+	      rotate(a.rotate, b.rotate, s, q);
+	      skewX(a.skewX, b.skewX, s, q);
+	      scale(a.scaleX, a.scaleY, b.scaleX, b.scaleY, s, q);
+	      a = b = null; // gc
+	      return function(t) {
+	        var i = -1, n = q.length, o;
+	        while (++i < n) s[(o = q[i]).i] = o.x(t);
+	        return s.join("");
+	      };
+	    };
+	  }
+	
+	  var interpolateTransformCss = interpolateTransform(parseCss, "px, ", "px)", "deg)");
+	  var interpolateTransformSvg = interpolateTransform(parseSvg, ", ", ")", ")");
 	
 	  var rho = Math.SQRT2;
 	  var rho2 = 2;
@@ -6058,172 +6130,140 @@ return /******/ (function(modules) { // webpackBootstrap
 	    return i;
 	  }
 	
-	  function deltaHue(h1, h0) {
-	    var delta = h1 - h0;
-	    return delta > 180 || delta < -180
-	        ? delta - 360 * Math.round(delta / 360)
-	        : delta;
-	  }
-	
-	  function hsl$1(a, b) {
-	    a = d3Color.hsl(a);
-	    b = d3Color.hsl(b);
-	    var ah = isNaN(a.h) ? b.h : a.h,
-	        as = isNaN(a.s) ? b.s : a.s,
-	        al = a.l,
-	        bh = isNaN(b.h) ? 0 : deltaHue(b.h, ah),
-	        bs = isNaN(b.s) ? 0 : b.s - as,
-	        bl = b.l - al;
+	  function interpolateHsl(start, end) {
+	    var h = interpolateHue((start = d3Color.hsl(start)).h, (end = d3Color.hsl(end)).h),
+	        s = nogamma(start.s, end.s),
+	        l = nogamma(start.l, end.l),
+	        opacity = nogamma(start.opacity, end.opacity);
 	    return function(t) {
-	      a.h = ah + bh * t;
-	      a.s = as + bs * t;
-	      a.l = al + bl * t;
-	      return a + "";
+	      start.h = h(t);
+	      start.s = s(t);
+	      start.l = l(t);
+	      start.opacity = opacity(t);
+	      return start + "";
 	    };
 	  }
 	
-	  function hslLong(a, b) {
-	    a = d3Color.hsl(a);
-	    b = d3Color.hsl(b);
-	    var ah = isNaN(a.h) ? b.h : a.h,
-	        as = isNaN(a.s) ? b.s : a.s,
-	        al = a.l,
-	        bh = isNaN(b.h) ? 0 : b.h - ah,
-	        bs = isNaN(b.s) ? 0 : b.s - as,
-	        bl = b.l - al;
+	  function interpolateHslLong(start, end) {
+	    var h = nogamma((start = d3Color.hsl(start)).h, (end = d3Color.hsl(end)).h),
+	        s = nogamma(start.s, end.s),
+	        l = nogamma(start.l, end.l),
+	        opacity = nogamma(start.opacity, end.opacity);
 	    return function(t) {
-	      a.h = ah + bh * t;
-	      a.s = as + bs * t;
-	      a.l = al + bl * t;
-	      return a + "";
+	      start.h = h(t);
+	      start.s = s(t);
+	      start.l = l(t);
+	      start.opacity = opacity(t);
+	      return start + "";
 	    };
 	  }
 	
-	  function lab$1(a, b) {
-	    a = d3Color.lab(a);
-	    b = d3Color.lab(b);
-	    var al = a.l,
-	        aa = a.a,
-	        ab = a.b,
-	        bl = b.l - al,
-	        ba = b.a - aa,
-	        bb = b.b - ab;
+	  function interpolateLab(start, end) {
+	    var l = nogamma((start = d3Color.lab(start)).l, (end = d3Color.lab(end)).l),
+	        a = nogamma(start.a, end.a),
+	        b = nogamma(start.b, end.b),
+	        opacity = nogamma(start.opacity, end.opacity);
 	    return function(t) {
-	      a.l = al + bl * t;
-	      a.a = aa + ba * t;
-	      a.b = ab + bb * t;
-	      return a + "";
+	      start.l = l(t);
+	      start.a = a(t);
+	      start.b = b(t);
+	      start.opacity = opacity(t);
+	      return start + "";
 	    };
 	  }
 	
-	  function hcl$1(a, b) {
-	    a = d3Color.hcl(a);
-	    b = d3Color.hcl(b);
-	    var ah = isNaN(a.h) ? b.h : a.h,
-	        ac = isNaN(a.c) ? b.c : a.c,
-	        al = a.l,
-	        bh = isNaN(b.h) ? 0 : deltaHue(b.h, ah),
-	        bc = isNaN(b.c) ? 0 : b.c - ac,
-	        bl = b.l - al;
+	  function interpolateHcl(start, end) {
+	    var h = interpolateHue((start = d3Color.hcl(start)).h, (end = d3Color.hcl(end)).h),
+	        c = nogamma(start.c, end.c),
+	        l = nogamma(start.l, end.l),
+	        opacity = nogamma(start.opacity, end.opacity);
 	    return function(t) {
-	      a.h = ah + bh * t;
-	      a.c = ac + bc * t;
-	      a.l = al + bl * t;
-	      return a + "";
+	      start.h = h(t);
+	      start.c = c(t);
+	      start.l = l(t);
+	      start.opacity = opacity(t);
+	      return start + "";
 	    };
 	  }
 	
-	  function hclLong(a, b) {
-	    a = d3Color.hcl(a);
-	    b = d3Color.hcl(b);
-	    var ah = isNaN(a.h) ? b.h : a.h,
-	        ac = isNaN(a.c) ? b.c : a.c,
-	        al = a.l,
-	        bh = isNaN(b.h) ? 0 : b.h - ah,
-	        bc = isNaN(b.c) ? 0 : b.c - ac,
-	        bl = b.l - al;
+	  function interpolateHclLong(start, end) {
+	    var h = nogamma((start = d3Color.hcl(start)).h, (end = d3Color.hcl(end)).h),
+	        c = nogamma(start.c, end.c),
+	        l = nogamma(start.l, end.l),
+	        opacity = nogamma(start.opacity, end.opacity);
 	    return function(t) {
-	      a.h = ah + bh * t;
-	      a.c = ac + bc * t;
-	      a.l = al + bl * t;
-	      return a + "";
+	      start.h = h(t);
+	      start.c = c(t);
+	      start.l = l(t);
+	      start.opacity = opacity(t);
+	      return start + "";
 	    };
 	  }
 	
-	  function cubehelix$1(a, b, gamma) {
-	    gamma = gamma == null ? 1 : +gamma;
-	    a = d3Color.cubehelix(a);
-	    b = d3Color.cubehelix(b);
-	    var ah = isNaN(a.h) ? b.h : a.h,
-	        as = isNaN(a.s) ? b.s : a.s,
-	        al = a.l,
-	        bh = isNaN(b.h) ? 0 : deltaHue(b.h, ah),
-	        bs = isNaN(b.s) ? 0 : b.s - as,
-	        bl = b.l - al;
-	    return function(t) {
-	      a.h = ah + bh * t;
-	      a.s = as + bs * t;
-	      a.l = al + bl * Math.pow(t, gamma);
-	      return a + "";
-	    };
-	  }
+	  var cubehelix$1 = (function gamma(y) {
+	    y = +y;
 	
-	  function cubehelixLong(a, b, gamma) {
-	    gamma = gamma == null ? 1 : +gamma;
-	    a = d3Color.cubehelix(a);
-	    b = d3Color.cubehelix(b);
-	    var ah = isNaN(a.h) ? b.h : a.h,
-	        as = isNaN(a.s) ? b.s : a.s,
-	        al = a.l,
-	        bh = isNaN(b.h) ? 0 : b.h - ah,
-	        bs = isNaN(b.s) ? 0 : b.s - as,
-	        bl = b.l - al;
-	    return function(t) {
-	      a.h = ah + bh * t;
-	      a.s = as + bs * t;
-	      a.l = al + bl * Math.pow(t, gamma);
-	      return a + "";
-	    };
-	  }
+	    function interpolateCubehelix(start, end) {
+	      var h = interpolateHue((start = d3Color.cubehelix(start)).h, (end = d3Color.cubehelix(end)).h),
+	          s = nogamma(start.s, end.s),
+	          l = nogamma(start.l, end.l),
+	          opacity = nogamma(start.opacity, end.opacity);
+	      return function(t) {
+	        start.h = h(t);
+	        start.s = s(t);
+	        start.l = l(Math.pow(t, y));
+	        start.opacity = opacity(t);
+	        return start + "";
+	      };
+	    }
 	
-	  var slice = Array.prototype.slice;
+	    interpolateCubehelix.gamma = gamma;
 	
-	  function bindN(type, args) {
-	    args = slice.call(args);
-	    args[0] = null;
-	    args.unshift(null);
-	    return function(a, b) {
-	      args[0] = a;
-	      args[1] = b;
-	      return type.apply(null, args);
-	    };
-	  }
+	    return interpolateCubehelix;
+	  })(1);
 	
-	  function bind(type) {
-	    return arguments.length === 1 ? type : bindN(type, arguments);
-	  }
+	  var cubehelixLong = (function gamma(y) {
+	    y = +y;
 	
-	  var version = "0.4.1";
+	    function interpolateCubehelixLong(start, end) {
+	      var h = nogamma((start = d3Color.cubehelix(start)).h, (end = d3Color.cubehelix(end)).h),
+	          s = nogamma(start.s, end.s),
+	          l = nogamma(start.l, end.l),
+	          opacity = nogamma(start.opacity, end.opacity);
+	      return function(t) {
+	        start.h = h(t);
+	        start.s = s(t);
+	        start.l = l(Math.pow(t, y));
+	        start.opacity = opacity(t);
+	        return start + "";
+	      };
+	    }
+	
+	    interpolateCubehelixLong.gamma = gamma;
+	
+	    return interpolateCubehelixLong;
+	  })(1);
+	
+	  var version = "0.7.0";
 	
 	  exports.version = version;
 	  exports.interpolate = value;
-	  exports.interpolators = values;
 	  exports.interpolateArray = array;
 	  exports.interpolateNumber = number;
 	  exports.interpolateObject = object;
 	  exports.interpolateRound = round;
 	  exports.interpolateString = string;
-	  exports.interpolateTransform = transform;
+	  exports.interpolateTransformCss = interpolateTransformCss;
+	  exports.interpolateTransformSvg = interpolateTransformSvg;
 	  exports.interpolateZoom = zoom;
 	  exports.interpolateRgb = rgb$1;
-	  exports.interpolateHsl = hsl$1;
-	  exports.interpolateHslLong = hslLong;
-	  exports.interpolateLab = lab$1;
-	  exports.interpolateHcl = hcl$1;
-	  exports.interpolateHclLong = hclLong;
+	  exports.interpolateHsl = interpolateHsl;
+	  exports.interpolateHslLong = interpolateHslLong;
+	  exports.interpolateLab = interpolateLab;
+	  exports.interpolateHcl = interpolateHcl;
+	  exports.interpolateHclLong = interpolateHclLong;
 	  exports.interpolateCubehelix = cubehelix$1;
 	  exports.interpolateCubehelixLong = cubehelixLong;
-	  exports.interpolateBind = bind;
 	
 	}));
 
@@ -6234,8 +6274,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	(function (global, factory) {
 	   true ? factory(exports) :
 	  typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	  (factory((global.d3_color = {})));
+	  (factory((global.d3_color = global.d3_color || {})));
 	}(this, function (exports) { 'use strict';
+	
+	  function define(constructor, factory, prototype) {
+	    constructor.prototype = factory.prototype = prototype;
+	    prototype.constructor = constructor;
+	  }
+	
+	  function extend(parent, definition) {
+	    var prototype = Object.create(parent.prototype);
+	    for (var key in definition) prototype[key] = definition[key];
+	    return prototype;
+	  }
 	
 	  function Color() {}
 	
@@ -6246,7 +6297,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	  var reHex6 = /^#([0-9a-f]{6})$/;
 	  var reRgbInteger = /^rgb\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*\)$/;
 	  var reRgbPercent = /^rgb\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
+	  var reRgbaInteger = /^rgba\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
+	  var reRgbaPercent = /^rgba\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
 	  var reHslPercent = /^hsl\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
+	  var reHslaPercent = /^hsla\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
 	  var named = {
 	    aliceblue: 0xf0f8ff,
 	    antiquewhite: 0xfaebd7,
@@ -6398,155 +6452,158 @@ return /******/ (function(modules) { // webpackBootstrap
 	    yellowgreen: 0x9acd32
 	  };
 	
-	  color.prototype = Color.prototype = {
+	  define(Color, color, {
 	    displayable: function() {
 	      return this.rgb().displayable();
 	    },
 	    toString: function() {
 	      return this.rgb() + "";
 	    }
-	  };
+	  });
 	
 	  function color(format) {
 	    var m;
 	    format = (format + "").trim().toLowerCase();
-	    return (m = reHex3.exec(format)) ? (m = parseInt(m[1], 16), new Rgb((m >> 8 & 0xf) | (m >> 4 & 0x0f0), (m >> 4 & 0xf) | (m & 0xf0), ((m & 0xf) << 4) | (m & 0xf))) // #f00
+	    return (m = reHex3.exec(format)) ? (m = parseInt(m[1], 16), new Rgb((m >> 8 & 0xf) | (m >> 4 & 0x0f0), (m >> 4 & 0xf) | (m & 0xf0), ((m & 0xf) << 4) | (m & 0xf), 1)) // #f00
 	        : (m = reHex6.exec(format)) ? rgbn(parseInt(m[1], 16)) // #ff0000
-	        : (m = reRgbInteger.exec(format)) ? new Rgb(m[1], m[2], m[3]) // rgb(255,0,0)
-	        : (m = reRgbPercent.exec(format)) ? new Rgb(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100) // rgb(100%,0%,0%)
-	        : (m = reHslPercent.exec(format)) ? new Hsl(m[1], m[2] / 100, m[3] / 100) // hsl(120,50%,50%)
+	        : (m = reRgbInteger.exec(format)) ? new Rgb(m[1], m[2], m[3], 1) // rgb(255, 0, 0)
+	        : (m = reRgbPercent.exec(format)) ? new Rgb(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, 1) // rgb(100%, 0%, 0%)
+	        : (m = reRgbaInteger.exec(format)) ? rgba(m[1], m[2], m[3], m[4]) // rgba(255, 0, 0, 1)
+	        : (m = reRgbaPercent.exec(format)) ? rgba(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, m[4]) // rgb(100%, 0%, 0%, 1)
+	        : (m = reHslPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, 1) // hsl(120, 50%, 50%)
+	        : (m = reHslaPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, m[4]) // hsla(120, 50%, 50%, 1)
 	        : named.hasOwnProperty(format) ? rgbn(named[format])
+	        : format === "transparent" ? new Rgb(NaN, NaN, NaN, 0)
 	        : null;
 	  }
 	
 	  function rgbn(n) {
-	    return new Rgb(n >> 16 & 0xff, n >> 8 & 0xff, n & 0xff);
+	    return new Rgb(n >> 16 & 0xff, n >> 8 & 0xff, n & 0xff, 1);
 	  }
 	
-	  function rgb(r, g, b) {
-	    if (arguments.length === 1) {
-	      if (!(r instanceof Color)) r = color(r);
-	      if (r) {
-	        r = r.rgb();
-	        b = r.b;
-	        g = r.g;
-	        r = r.r;
-	      } else {
-	        r = g = b = NaN;
-	      }
-	    }
-	    return new Rgb(r, g, b);
+	  function rgba(r, g, b, a) {
+	    if (a <= 0) r = g = b = NaN;
+	    return new Rgb(r, g, b, a);
 	  }
 	
-	  function Rgb(r, g, b) {
+	  function rgbConvert(o) {
+	    if (!(o instanceof Color)) o = color(o);
+	    if (!o) return new Rgb;
+	    o = o.rgb();
+	    return new Rgb(o.r, o.g, o.b, o.opacity);
+	  }
+	
+	  function rgb(r, g, b, opacity) {
+	    return arguments.length === 1 ? rgbConvert(r) : new Rgb(r, g, b, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Rgb(r, g, b, opacity) {
 	    this.r = +r;
 	    this.g = +g;
 	    this.b = +b;
+	    this.opacity = +opacity;
 	  }
 	
-	  var _rgb = rgb.prototype = Rgb.prototype = new Color;
-	
-	  _rgb.brighter = function(k) {
-	    k = k == null ? brighter : Math.pow(brighter, k);
-	    return new Rgb(this.r * k, this.g * k, this.b * k);
-	  };
-	
-	  _rgb.darker = function(k) {
-	    k = k == null ? darker : Math.pow(darker, k);
-	    return new Rgb(this.r * k, this.g * k, this.b * k);
-	  };
-	
-	  _rgb.rgb = function() {
-	    return this;
-	  };
-	
-	  _rgb.displayable = function() {
-	    return (0 <= this.r && this.r <= 255)
-	        && (0 <= this.g && this.g <= 255)
-	        && (0 <= this.b && this.b <= 255);
-	  };
-	
-	  _rgb.toString = function() {
-	    var r = Math.round(this.r),
-	        g = Math.round(this.g),
-	        b = Math.round(this.b);
-	    return "#"
-	        + (isNaN(r) || r <= 0 ? "00" : r < 16 ? "0" + r.toString(16) : r >= 255 ? "ff" : r.toString(16))
-	        + (isNaN(g) || g <= 0 ? "00" : g < 16 ? "0" + g.toString(16) : g >= 255 ? "ff" : g.toString(16))
-	        + (isNaN(b) || b <= 0 ? "00" : b < 16 ? "0" + b.toString(16) : b >= 255 ? "ff" : b.toString(16));
-	  };
-	
-	  function hsl(h, s, l) {
-	    if (arguments.length === 1) {
-	      if (h instanceof Hsl) {
-	        l = h.l;
-	        s = h.s;
-	        h = h.h;
-	      } else {
-	        if (!(h instanceof Color)) h = color(h);
-	        if (h) {
-	          if (h instanceof Hsl) return h;
-	          h = h.rgb();
-	          var r = h.r / 255,
-	              g = h.g / 255,
-	              b = h.b / 255,
-	              min = Math.min(r, g, b),
-	              max = Math.max(r, g, b),
-	              range = max - min;
-	          l = (max + min) / 2;
-	          if (range) {
-	            s = l < 0.5 ? range / (max + min) : range / (2 - max - min);
-	            if (r === max) h = (g - b) / range + (g < b) * 6;
-	            else if (g === max) h = (b - r) / range + 2;
-	            else h = (r - g) / range + 4;
-	            h *= 60;
-	          } else {
-	            h = NaN;
-	            s = l > 0 && l < 1 ? 0 : h;
-	          }
-	        } else {
-	          h = s = l = NaN;
-	        }
-	      }
+	  define(Rgb, rgb, extend(Color, {
+	    brighter: function(k) {
+	      k = k == null ? brighter : Math.pow(brighter, k);
+	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
+	    },
+	    darker: function(k) {
+	      k = k == null ? darker : Math.pow(darker, k);
+	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
+	    },
+	    rgb: function() {
+	      return this;
+	    },
+	    displayable: function() {
+	      return (0 <= this.r && this.r <= 255)
+	          && (0 <= this.g && this.g <= 255)
+	          && (0 <= this.b && this.b <= 255)
+	          && (0 <= this.opacity && this.opacity <= 1);
+	    },
+	    toString: function() {
+	      var a = this.opacity; a = isNaN(a) ? 1 : Math.max(0, Math.min(1, a));
+	      return (a === 1 ? "rgb(" : "rgba(")
+	          + Math.max(0, Math.min(255, Math.round(this.r) || 0)) + ", "
+	          + Math.max(0, Math.min(255, Math.round(this.g) || 0)) + ", "
+	          + Math.max(0, Math.min(255, Math.round(this.b) || 0))
+	          + (a === 1 ? ")" : ", " + a + ")");
 	    }
-	    return new Hsl(h, s, l);
+	  }));
+	
+	  function hsla(h, s, l, a) {
+	    if (a <= 0) h = s = l = NaN;
+	    else if (l <= 0 || l >= 1) h = s = NaN;
+	    else if (s <= 0) h = NaN;
+	    return new Hsl(h, s, l, a);
 	  }
 	
-	  function Hsl(h, s, l) {
+	  function hslConvert(o) {
+	    if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
+	    if (!(o instanceof Color)) o = color(o);
+	    if (!o) return new Hsl;
+	    if (o instanceof Hsl) return o;
+	    o = o.rgb();
+	    var r = o.r / 255,
+	        g = o.g / 255,
+	        b = o.b / 255,
+	        min = Math.min(r, g, b),
+	        max = Math.max(r, g, b),
+	        h = NaN,
+	        s = max - min,
+	        l = (max + min) / 2;
+	    if (s) {
+	      if (r === max) h = (g - b) / s + (g < b) * 6;
+	      else if (g === max) h = (b - r) / s + 2;
+	      else h = (r - g) / s + 4;
+	      s /= l < 0.5 ? max + min : 2 - max - min;
+	      h *= 60;
+	    } else {
+	      s = l > 0 && l < 1 ? 0 : h;
+	    }
+	    return new Hsl(h, s, l, o.opacity);
+	  }
+	
+	  function hsl(h, s, l, opacity) {
+	    return arguments.length === 1 ? hslConvert(h) : new Hsl(h, s, l, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Hsl(h, s, l, opacity) {
 	    this.h = +h;
 	    this.s = +s;
 	    this.l = +l;
+	    this.opacity = +opacity;
 	  }
 	
-	  var _hsl = hsl.prototype = Hsl.prototype = new Color;
-	
-	  _hsl.brighter = function(k) {
-	    k = k == null ? brighter : Math.pow(brighter, k);
-	    return new Hsl(this.h, this.s, this.l * k);
-	  };
-	
-	  _hsl.darker = function(k) {
-	    k = k == null ? darker : Math.pow(darker, k);
-	    return new Hsl(this.h, this.s, this.l * k);
-	  };
-	
-	  _hsl.rgb = function() {
-	    var h = this.h % 360 + (this.h < 0) * 360,
-	        s = isNaN(h) || isNaN(this.s) ? 0 : this.s,
-	        l = this.l,
-	        m2 = l + (l < 0.5 ? l : 1 - l) * s,
-	        m1 = 2 * l - m2;
-	    return new Rgb(
-	      hsl2rgb(h >= 240 ? h - 240 : h + 120, m1, m2),
-	      hsl2rgb(h, m1, m2),
-	      hsl2rgb(h < 120 ? h + 240 : h - 120, m1, m2)
-	    );
-	  };
-	
-	  _hsl.displayable = function() {
-	    return (0 <= this.s && this.s <= 1 || isNaN(this.s))
-	        && (0 <= this.l && this.l <= 1);
-	  };
+	  define(Hsl, hsl, extend(Color, {
+	    brighter: function(k) {
+	      k = k == null ? brighter : Math.pow(brighter, k);
+	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
+	    },
+	    darker: function(k) {
+	      k = k == null ? darker : Math.pow(darker, k);
+	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
+	    },
+	    rgb: function() {
+	      var h = this.h % 360 + (this.h < 0) * 360,
+	          s = isNaN(h) || isNaN(this.s) ? 0 : this.s,
+	          l = this.l,
+	          m2 = l + (l < 0.5 ? l : 1 - l) * s,
+	          m1 = 2 * l - m2;
+	      return new Rgb(
+	        hsl2rgb(h >= 240 ? h - 240 : h + 120, m1, m2),
+	        hsl2rgb(h, m1, m2),
+	        hsl2rgb(h < 120 ? h + 240 : h - 120, m1, m2),
+	        this.opacity
+	      );
+	    },
+	    displayable: function() {
+	      return (0 <= this.s && this.s <= 1 || isNaN(this.s))
+	          && (0 <= this.l && this.l <= 1)
+	          && (0 <= this.opacity && this.opacity <= 1);
+	    }
+	  }));
 	
 	  /* From FvD 13.37, CSS Color Module Level 3 */
 	  function hsl2rgb(h, m1, m2) {
@@ -6567,62 +6624,55 @@ return /******/ (function(modules) { // webpackBootstrap
 	  var t1 = 6 / 29;
 	  var t2 = 3 * t1 * t1;
 	  var t3 = t1 * t1 * t1;
-	  function lab(l, a, b) {
-	    if (arguments.length === 1) {
-	      if (l instanceof Lab) {
-	        b = l.b;
-	        a = l.a;
-	        l = l.l;
-	      } else if (l instanceof Hcl) {
-	        var h = l.h * deg2rad;
-	        b = Math.sin(h) * l.c;
-	        a = Math.cos(h) * l.c;
-	        l = l.l;
-	      } else {
-	        if (!(l instanceof Rgb)) l = rgb(l);
-	        b = rgb2xyz(l.r);
-	        a = rgb2xyz(l.g);
-	        l = rgb2xyz(l.b);
-	        var x = xyz2lab((0.4124564 * b + 0.3575761 * a + 0.1804375 * l) / Xn),
-	            y = xyz2lab((0.2126729 * b + 0.7151522 * a + 0.0721750 * l) / Yn),
-	            z = xyz2lab((0.0193339 * b + 0.1191920 * a + 0.9503041 * l) / Zn);
-	        b = 200 * (y - z);
-	        a = 500 * (x - y);
-	        l = 116 * y - 16;
-	      }
+	  function labConvert(o) {
+	    if (o instanceof Lab) return new Lab(o.l, o.a, o.b, o.opacity);
+	    if (o instanceof Hcl) {
+	      var h = o.h * deg2rad;
+	      return new Lab(o.l, Math.cos(h) * o.c, Math.sin(h) * o.c, o.opacity);
 	    }
-	    return new Lab(l, a, b);
+	    if (!(o instanceof Rgb)) o = rgbConvert(o);
+	    var b = rgb2xyz(o.r),
+	        a = rgb2xyz(o.g),
+	        l = rgb2xyz(o.b),
+	        x = xyz2lab((0.4124564 * b + 0.3575761 * a + 0.1804375 * l) / Xn),
+	        y = xyz2lab((0.2126729 * b + 0.7151522 * a + 0.0721750 * l) / Yn),
+	        z = xyz2lab((0.0193339 * b + 0.1191920 * a + 0.9503041 * l) / Zn);
+	    return new Lab(116 * y - 16, 500 * (x - y), 200 * (y - z), o.opacity);
 	  }
 	
-	  function Lab(l, a, b) {
+	  function lab(l, a, b, opacity) {
+	    return arguments.length === 1 ? labConvert(l) : new Lab(l, a, b, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Lab(l, a, b, opacity) {
 	    this.l = +l;
 	    this.a = +a;
 	    this.b = +b;
+	    this.opacity = +opacity;
 	  }
 	
-	  var _lab = lab.prototype = Lab.prototype = new Color;
-	
-	  _lab.brighter = function(k) {
-	    return new Lab(this.l + Kn * (k == null ? 1 : k), this.a, this.b);
-	  };
-	
-	  _lab.darker = function(k) {
-	    return new Lab(this.l - Kn * (k == null ? 1 : k), this.a, this.b);
-	  };
-	
-	  _lab.rgb = function() {
-	    var y = (this.l + 16) / 116,
-	        x = isNaN(this.a) ? y : y + this.a / 500,
-	        z = isNaN(this.b) ? y : y - this.b / 200;
-	    y = Yn * lab2xyz(y);
-	    x = Xn * lab2xyz(x);
-	    z = Zn * lab2xyz(z);
-	    return new Rgb(
-	      xyz2rgb( 3.2404542 * x - 1.5371385 * y - 0.4985314 * z), // D65 -> sRGB
-	      xyz2rgb(-0.9692660 * x + 1.8760108 * y + 0.0415560 * z),
-	      xyz2rgb( 0.0556434 * x - 0.2040259 * y + 1.0572252 * z)
-	    );
-	  };
+	  define(Lab, lab, extend(Color, {
+	    brighter: function(k) {
+	      return new Lab(this.l + Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
+	    },
+	    darker: function(k) {
+	      return new Lab(this.l - Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
+	    },
+	    rgb: function() {
+	      var y = (this.l + 16) / 116,
+	          x = isNaN(this.a) ? y : y + this.a / 500,
+	          z = isNaN(this.b) ? y : y - this.b / 200;
+	      y = Yn * lab2xyz(y);
+	      x = Xn * lab2xyz(x);
+	      z = Zn * lab2xyz(z);
+	      return new Rgb(
+	        xyz2rgb( 3.2404542 * x - 1.5371385 * y - 0.4985314 * z), // D65 -> sRGB
+	        xyz2rgb(-0.9692660 * x + 1.8760108 * y + 0.0415560 * z),
+	        xyz2rgb( 0.0556434 * x - 0.2040259 * y + 1.0572252 * z),
+	        this.opacity
+	      );
+	    }
+	  }));
 	
 	  function xyz2lab(t) {
 	    return t > t3 ? Math.pow(t, 1 / 3) : t / t2 + t0;
@@ -6640,42 +6690,35 @@ return /******/ (function(modules) { // webpackBootstrap
 	    return (x /= 255) <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
 	  }
 	
-	  function hcl(h, c, l) {
-	    if (arguments.length === 1) {
-	      if (h instanceof Hcl) {
-	        l = h.l;
-	        c = h.c;
-	        h = h.h;
-	      } else {
-	        if (!(h instanceof Lab)) h = lab(h);
-	        l = h.l;
-	        c = Math.sqrt(h.a * h.a + h.b * h.b);
-	        h = Math.atan2(h.b, h.a) * rad2deg;
-	        if (h < 0) h += 360;
-	      }
-	    }
-	    return new Hcl(h, c, l);
+	  function hclConvert(o) {
+	    if (o instanceof Hcl) return new Hcl(o.h, o.c, o.l, o.opacity);
+	    if (!(o instanceof Lab)) o = labConvert(o);
+	    var h = Math.atan2(o.b, o.a) * rad2deg;
+	    return new Hcl(h < 0 ? h + 360 : h, Math.sqrt(o.a * o.a + o.b * o.b), o.l, o.opacity);
 	  }
 	
-	  function Hcl(h, c, l) {
+	  function hcl(h, c, l, opacity) {
+	    return arguments.length === 1 ? hclConvert(h) : new Hcl(h, c, l, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Hcl(h, c, l, opacity) {
 	    this.h = +h;
 	    this.c = +c;
 	    this.l = +l;
+	    this.opacity = +opacity;
 	  }
 	
-	  var _hcl = hcl.prototype = Hcl.prototype = new Color;
-	
-	  _hcl.brighter = function(k) {
-	    return new Hcl(this.h, this.c, this.l + Kn * (k == null ? 1 : k));
-	  };
-	
-	  _hcl.darker = function(k) {
-	    return new Hcl(this.h, this.c, this.l - Kn * (k == null ? 1 : k));
-	  };
-	
-	  _hcl.rgb = function() {
-	    return lab(this).rgb();
-	  };
+	  define(Hcl, hcl, extend(Color, {
+	    brighter: function(k) {
+	      return new Hcl(this.h, this.c, this.l + Kn * (k == null ? 1 : k), this.opacity);
+	    },
+	    darker: function(k) {
+	      return new Hcl(this.h, this.c, this.l - Kn * (k == null ? 1 : k), this.opacity);
+	    },
+	    rgb: function() {
+	      return labConvert(this).rgb();
+	    }
+	  }));
 	
 	  var A = -0.14861;
 	  var B = +1.78277;
@@ -6685,57 +6728,56 @@ return /******/ (function(modules) { // webpackBootstrap
 	  var ED = E * D;
 	  var EB = E * B;
 	  var BC_DA = B * C - D * A;
-	  function cubehelix(h, s, l) {
-	    if (arguments.length === 1) {
-	      if (h instanceof Cubehelix) {
-	        l = h.l;
-	        s = h.s;
-	        h = h.h;
-	      } else {
-	        if (!(h instanceof Rgb)) h = rgb(h);
-	        var r = h.r / 255, g = h.g / 255, b = h.b / 255;
-	        l = (BC_DA * b + ED * r - EB * g) / (BC_DA + ED - EB);
-	        var bl = b - l, k = (E * (g - l) - C * bl) / D;
-	        s = Math.sqrt(k * k + bl * bl) / (E * l * (1 - l)); // NaN if l=0 or l=1
+	  function cubehelixConvert(o) {
+	    if (o instanceof Cubehelix) return new Cubehelix(o.h, o.s, o.l, o.opacity);
+	    if (!(o instanceof Rgb)) o = rgbConvert(o);
+	    var r = o.r / 255,
+	        g = o.g / 255,
+	        b = o.b / 255,
+	        l = (BC_DA * b + ED * r - EB * g) / (BC_DA + ED - EB),
+	        bl = b - l,
+	        k = (E * (g - l) - C * bl) / D,
+	        s = Math.sqrt(k * k + bl * bl) / (E * l * (1 - l)), // NaN if l=0 or l=1
 	        h = s ? Math.atan2(k, bl) * rad2deg - 120 : NaN;
-	        if (h < 0) h += 360;
-	      }
-	    }
-	    return new Cubehelix(h, s, l);
+	    return new Cubehelix(h < 0 ? h + 360 : h, s, l, o.opacity);
 	  }
 	
-	  function Cubehelix(h, s, l) {
+	  function cubehelix(h, s, l, opacity) {
+	    return arguments.length === 1 ? cubehelixConvert(h) : new Cubehelix(h, s, l, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Cubehelix(h, s, l, opacity) {
 	    this.h = +h;
 	    this.s = +s;
 	    this.l = +l;
+	    this.opacity = +opacity;
 	  }
 	
-	  var _cubehelix = cubehelix.prototype = Cubehelix.prototype = new Color;
+	  define(Cubehelix, cubehelix, extend(Color, {
+	    brighter: function(k) {
+	      k = k == null ? brighter : Math.pow(brighter, k);
+	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
+	    },
+	    darker: function(k) {
+	      k = k == null ? darker : Math.pow(darker, k);
+	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
+	    },
+	    rgb: function() {
+	      var h = isNaN(this.h) ? 0 : (this.h + 120) * deg2rad,
+	          l = +this.l,
+	          a = isNaN(this.s) ? 0 : this.s * l * (1 - l),
+	          cosh = Math.cos(h),
+	          sinh = Math.sin(h);
+	      return new Rgb(
+	        255 * (l + a * (A * cosh + B * sinh)),
+	        255 * (l + a * (C * cosh + D * sinh)),
+	        255 * (l + a * (E * cosh)),
+	        this.opacity
+	      );
+	    }
+	  }));
 	
-	  _cubehelix.brighter = function(k) {
-	    k = k == null ? brighter : Math.pow(brighter, k);
-	    return new Cubehelix(this.h, this.s, this.l * k);
-	  };
-	
-	  _cubehelix.darker = function(k) {
-	    k = k == null ? darker : Math.pow(darker, k);
-	    return new Cubehelix(this.h, this.s, this.l * k);
-	  };
-	
-	  _cubehelix.rgb = function() {
-	    var h = isNaN(this.h) ? 0 : (this.h + 120) * deg2rad,
-	        l = +this.l,
-	        a = isNaN(this.s) ? 0 : this.s * l * (1 - l),
-	        cosh = Math.cos(h),
-	        sinh = Math.sin(h);
-	    return new Rgb(
-	      255 * (l + a * (A * cosh + B * sinh)),
-	      255 * (l + a * (C * cosh + D * sinh)),
-	      255 * (l + a * (E * cosh))
-	    );
-	  };
-	
-	  var version = "0.3.4";
+	  var version = "0.4.2";
 	
 	  exports.version = version;
 	  exports.color = color;
@@ -10643,6 +10685,528 @@ return /******/ (function(modules) { // webpackBootstrap
 	  exports.timeFormatZhCn = zhCN;
 	  exports.isoFormat = formatIso;
 	  exports.isoParse = parseIso;
+	
+	}));
+
+/***/ },
+/* 23 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function (global, factory) {
+	   true ? factory(exports) :
+	  typeof define === 'function' && define.amd ? define(['exports'], factory) :
+	  (factory((global.d3_color = global.d3_color || {})));
+	}(this, function (exports) { 'use strict';
+	
+	  function define(constructor, factory, prototype) {
+	    constructor.prototype = factory.prototype = prototype;
+	    prototype.constructor = constructor;
+	  }
+	
+	  function extend(parent, definition) {
+	    var prototype = Object.create(parent.prototype);
+	    for (var key in definition) prototype[key] = definition[key];
+	    return prototype;
+	  }
+	
+	  function Color() {}
+	
+	  var darker = 0.7;
+	  var brighter = 1 / darker;
+	
+	  var reHex3 = /^#([0-9a-f]{3})$/;
+	  var reHex6 = /^#([0-9a-f]{6})$/;
+	  var reRgbInteger = /^rgb\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*\)$/;
+	  var reRgbPercent = /^rgb\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
+	  var reRgbaInteger = /^rgba\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
+	  var reRgbaPercent = /^rgba\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
+	  var reHslPercent = /^hsl\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
+	  var reHslaPercent = /^hsla\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
+	  var named = {
+	    aliceblue: 0xf0f8ff,
+	    antiquewhite: 0xfaebd7,
+	    aqua: 0x00ffff,
+	    aquamarine: 0x7fffd4,
+	    azure: 0xf0ffff,
+	    beige: 0xf5f5dc,
+	    bisque: 0xffe4c4,
+	    black: 0x000000,
+	    blanchedalmond: 0xffebcd,
+	    blue: 0x0000ff,
+	    blueviolet: 0x8a2be2,
+	    brown: 0xa52a2a,
+	    burlywood: 0xdeb887,
+	    cadetblue: 0x5f9ea0,
+	    chartreuse: 0x7fff00,
+	    chocolate: 0xd2691e,
+	    coral: 0xff7f50,
+	    cornflowerblue: 0x6495ed,
+	    cornsilk: 0xfff8dc,
+	    crimson: 0xdc143c,
+	    cyan: 0x00ffff,
+	    darkblue: 0x00008b,
+	    darkcyan: 0x008b8b,
+	    darkgoldenrod: 0xb8860b,
+	    darkgray: 0xa9a9a9,
+	    darkgreen: 0x006400,
+	    darkgrey: 0xa9a9a9,
+	    darkkhaki: 0xbdb76b,
+	    darkmagenta: 0x8b008b,
+	    darkolivegreen: 0x556b2f,
+	    darkorange: 0xff8c00,
+	    darkorchid: 0x9932cc,
+	    darkred: 0x8b0000,
+	    darksalmon: 0xe9967a,
+	    darkseagreen: 0x8fbc8f,
+	    darkslateblue: 0x483d8b,
+	    darkslategray: 0x2f4f4f,
+	    darkslategrey: 0x2f4f4f,
+	    darkturquoise: 0x00ced1,
+	    darkviolet: 0x9400d3,
+	    deeppink: 0xff1493,
+	    deepskyblue: 0x00bfff,
+	    dimgray: 0x696969,
+	    dimgrey: 0x696969,
+	    dodgerblue: 0x1e90ff,
+	    firebrick: 0xb22222,
+	    floralwhite: 0xfffaf0,
+	    forestgreen: 0x228b22,
+	    fuchsia: 0xff00ff,
+	    gainsboro: 0xdcdcdc,
+	    ghostwhite: 0xf8f8ff,
+	    gold: 0xffd700,
+	    goldenrod: 0xdaa520,
+	    gray: 0x808080,
+	    green: 0x008000,
+	    greenyellow: 0xadff2f,
+	    grey: 0x808080,
+	    honeydew: 0xf0fff0,
+	    hotpink: 0xff69b4,
+	    indianred: 0xcd5c5c,
+	    indigo: 0x4b0082,
+	    ivory: 0xfffff0,
+	    khaki: 0xf0e68c,
+	    lavender: 0xe6e6fa,
+	    lavenderblush: 0xfff0f5,
+	    lawngreen: 0x7cfc00,
+	    lemonchiffon: 0xfffacd,
+	    lightblue: 0xadd8e6,
+	    lightcoral: 0xf08080,
+	    lightcyan: 0xe0ffff,
+	    lightgoldenrodyellow: 0xfafad2,
+	    lightgray: 0xd3d3d3,
+	    lightgreen: 0x90ee90,
+	    lightgrey: 0xd3d3d3,
+	    lightpink: 0xffb6c1,
+	    lightsalmon: 0xffa07a,
+	    lightseagreen: 0x20b2aa,
+	    lightskyblue: 0x87cefa,
+	    lightslategray: 0x778899,
+	    lightslategrey: 0x778899,
+	    lightsteelblue: 0xb0c4de,
+	    lightyellow: 0xffffe0,
+	    lime: 0x00ff00,
+	    limegreen: 0x32cd32,
+	    linen: 0xfaf0e6,
+	    magenta: 0xff00ff,
+	    maroon: 0x800000,
+	    mediumaquamarine: 0x66cdaa,
+	    mediumblue: 0x0000cd,
+	    mediumorchid: 0xba55d3,
+	    mediumpurple: 0x9370db,
+	    mediumseagreen: 0x3cb371,
+	    mediumslateblue: 0x7b68ee,
+	    mediumspringgreen: 0x00fa9a,
+	    mediumturquoise: 0x48d1cc,
+	    mediumvioletred: 0xc71585,
+	    midnightblue: 0x191970,
+	    mintcream: 0xf5fffa,
+	    mistyrose: 0xffe4e1,
+	    moccasin: 0xffe4b5,
+	    navajowhite: 0xffdead,
+	    navy: 0x000080,
+	    oldlace: 0xfdf5e6,
+	    olive: 0x808000,
+	    olivedrab: 0x6b8e23,
+	    orange: 0xffa500,
+	    orangered: 0xff4500,
+	    orchid: 0xda70d6,
+	    palegoldenrod: 0xeee8aa,
+	    palegreen: 0x98fb98,
+	    paleturquoise: 0xafeeee,
+	    palevioletred: 0xdb7093,
+	    papayawhip: 0xffefd5,
+	    peachpuff: 0xffdab9,
+	    peru: 0xcd853f,
+	    pink: 0xffc0cb,
+	    plum: 0xdda0dd,
+	    powderblue: 0xb0e0e6,
+	    purple: 0x800080,
+	    rebeccapurple: 0x663399,
+	    red: 0xff0000,
+	    rosybrown: 0xbc8f8f,
+	    royalblue: 0x4169e1,
+	    saddlebrown: 0x8b4513,
+	    salmon: 0xfa8072,
+	    sandybrown: 0xf4a460,
+	    seagreen: 0x2e8b57,
+	    seashell: 0xfff5ee,
+	    sienna: 0xa0522d,
+	    silver: 0xc0c0c0,
+	    skyblue: 0x87ceeb,
+	    slateblue: 0x6a5acd,
+	    slategray: 0x708090,
+	    slategrey: 0x708090,
+	    snow: 0xfffafa,
+	    springgreen: 0x00ff7f,
+	    steelblue: 0x4682b4,
+	    tan: 0xd2b48c,
+	    teal: 0x008080,
+	    thistle: 0xd8bfd8,
+	    tomato: 0xff6347,
+	    turquoise: 0x40e0d0,
+	    violet: 0xee82ee,
+	    wheat: 0xf5deb3,
+	    white: 0xffffff,
+	    whitesmoke: 0xf5f5f5,
+	    yellow: 0xffff00,
+	    yellowgreen: 0x9acd32
+	  };
+	
+	  define(Color, color, {
+	    displayable: function() {
+	      return this.rgb().displayable();
+	    },
+	    toString: function() {
+	      return this.rgb() + "";
+	    }
+	  });
+	
+	  function color(format) {
+	    var m;
+	    format = (format + "").trim().toLowerCase();
+	    return (m = reHex3.exec(format)) ? (m = parseInt(m[1], 16), new Rgb((m >> 8 & 0xf) | (m >> 4 & 0x0f0), (m >> 4 & 0xf) | (m & 0xf0), ((m & 0xf) << 4) | (m & 0xf), 1)) // #f00
+	        : (m = reHex6.exec(format)) ? rgbn(parseInt(m[1], 16)) // #ff0000
+	        : (m = reRgbInteger.exec(format)) ? new Rgb(m[1], m[2], m[3], 1) // rgb(255, 0, 0)
+	        : (m = reRgbPercent.exec(format)) ? new Rgb(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, 1) // rgb(100%, 0%, 0%)
+	        : (m = reRgbaInteger.exec(format)) ? rgba(m[1], m[2], m[3], m[4]) // rgba(255, 0, 0, 1)
+	        : (m = reRgbaPercent.exec(format)) ? rgba(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, m[4]) // rgb(100%, 0%, 0%, 1)
+	        : (m = reHslPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, 1) // hsl(120, 50%, 50%)
+	        : (m = reHslaPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, m[4]) // hsla(120, 50%, 50%, 1)
+	        : named.hasOwnProperty(format) ? rgbn(named[format])
+	        : format === "transparent" ? new Rgb(NaN, NaN, NaN, 0)
+	        : null;
+	  }
+	
+	  function rgbn(n) {
+	    return new Rgb(n >> 16 & 0xff, n >> 8 & 0xff, n & 0xff, 1);
+	  }
+	
+	  function rgba(r, g, b, a) {
+	    if (a <= 0) r = g = b = NaN;
+	    return new Rgb(r, g, b, a);
+	  }
+	
+	  function rgbConvert(o) {
+	    if (!(o instanceof Color)) o = color(o);
+	    if (!o) return new Rgb;
+	    o = o.rgb();
+	    return new Rgb(o.r, o.g, o.b, o.opacity);
+	  }
+	
+	  function rgb(r, g, b, opacity) {
+	    return arguments.length === 1 ? rgbConvert(r) : new Rgb(r, g, b, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Rgb(r, g, b, opacity) {
+	    this.r = +r;
+	    this.g = +g;
+	    this.b = +b;
+	    this.opacity = +opacity;
+	  }
+	
+	  define(Rgb, rgb, extend(Color, {
+	    brighter: function(k) {
+	      k = k == null ? brighter : Math.pow(brighter, k);
+	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
+	    },
+	    darker: function(k) {
+	      k = k == null ? darker : Math.pow(darker, k);
+	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
+	    },
+	    rgb: function() {
+	      return this;
+	    },
+	    displayable: function() {
+	      return (0 <= this.r && this.r <= 255)
+	          && (0 <= this.g && this.g <= 255)
+	          && (0 <= this.b && this.b <= 255)
+	          && (0 <= this.opacity && this.opacity <= 1);
+	    },
+	    toString: function() {
+	      var a = this.opacity; a = isNaN(a) ? 1 : Math.max(0, Math.min(1, a));
+	      return (a === 1 ? "rgb(" : "rgba(")
+	          + Math.max(0, Math.min(255, Math.round(this.r) || 0)) + ", "
+	          + Math.max(0, Math.min(255, Math.round(this.g) || 0)) + ", "
+	          + Math.max(0, Math.min(255, Math.round(this.b) || 0))
+	          + (a === 1 ? ")" : ", " + a + ")");
+	    }
+	  }));
+	
+	  function hsla(h, s, l, a) {
+	    if (a <= 0) h = s = l = NaN;
+	    else if (l <= 0 || l >= 1) h = s = NaN;
+	    else if (s <= 0) h = NaN;
+	    return new Hsl(h, s, l, a);
+	  }
+	
+	  function hslConvert(o) {
+	    if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
+	    if (!(o instanceof Color)) o = color(o);
+	    if (!o) return new Hsl;
+	    if (o instanceof Hsl) return o;
+	    o = o.rgb();
+	    var r = o.r / 255,
+	        g = o.g / 255,
+	        b = o.b / 255,
+	        min = Math.min(r, g, b),
+	        max = Math.max(r, g, b),
+	        h = NaN,
+	        s = max - min,
+	        l = (max + min) / 2;
+	    if (s) {
+	      if (r === max) h = (g - b) / s + (g < b) * 6;
+	      else if (g === max) h = (b - r) / s + 2;
+	      else h = (r - g) / s + 4;
+	      s /= l < 0.5 ? max + min : 2 - max - min;
+	      h *= 60;
+	    } else {
+	      s = l > 0 && l < 1 ? 0 : h;
+	    }
+	    return new Hsl(h, s, l, o.opacity);
+	  }
+	
+	  function hsl(h, s, l, opacity) {
+	    return arguments.length === 1 ? hslConvert(h) : new Hsl(h, s, l, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Hsl(h, s, l, opacity) {
+	    this.h = +h;
+	    this.s = +s;
+	    this.l = +l;
+	    this.opacity = +opacity;
+	  }
+	
+	  define(Hsl, hsl, extend(Color, {
+	    brighter: function(k) {
+	      k = k == null ? brighter : Math.pow(brighter, k);
+	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
+	    },
+	    darker: function(k) {
+	      k = k == null ? darker : Math.pow(darker, k);
+	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
+	    },
+	    rgb: function() {
+	      var h = this.h % 360 + (this.h < 0) * 360,
+	          s = isNaN(h) || isNaN(this.s) ? 0 : this.s,
+	          l = this.l,
+	          m2 = l + (l < 0.5 ? l : 1 - l) * s,
+	          m1 = 2 * l - m2;
+	      return new Rgb(
+	        hsl2rgb(h >= 240 ? h - 240 : h + 120, m1, m2),
+	        hsl2rgb(h, m1, m2),
+	        hsl2rgb(h < 120 ? h + 240 : h - 120, m1, m2),
+	        this.opacity
+	      );
+	    },
+	    displayable: function() {
+	      return (0 <= this.s && this.s <= 1 || isNaN(this.s))
+	          && (0 <= this.l && this.l <= 1)
+	          && (0 <= this.opacity && this.opacity <= 1);
+	    }
+	  }));
+	
+	  /* From FvD 13.37, CSS Color Module Level 3 */
+	  function hsl2rgb(h, m1, m2) {
+	    return (h < 60 ? m1 + (m2 - m1) * h / 60
+	        : h < 180 ? m2
+	        : h < 240 ? m1 + (m2 - m1) * (240 - h) / 60
+	        : m1) * 255;
+	  }
+	
+	  var deg2rad = Math.PI / 180;
+	  var rad2deg = 180 / Math.PI;
+	
+	  var Kn = 18;
+	  var Xn = 0.950470;
+	  var Yn = 1;
+	  var Zn = 1.088830;
+	  var t0 = 4 / 29;
+	  var t1 = 6 / 29;
+	  var t2 = 3 * t1 * t1;
+	  var t3 = t1 * t1 * t1;
+	  function labConvert(o) {
+	    if (o instanceof Lab) return new Lab(o.l, o.a, o.b, o.opacity);
+	    if (o instanceof Hcl) {
+	      var h = o.h * deg2rad;
+	      return new Lab(o.l, Math.cos(h) * o.c, Math.sin(h) * o.c, o.opacity);
+	    }
+	    if (!(o instanceof Rgb)) o = rgbConvert(o);
+	    var b = rgb2xyz(o.r),
+	        a = rgb2xyz(o.g),
+	        l = rgb2xyz(o.b),
+	        x = xyz2lab((0.4124564 * b + 0.3575761 * a + 0.1804375 * l) / Xn),
+	        y = xyz2lab((0.2126729 * b + 0.7151522 * a + 0.0721750 * l) / Yn),
+	        z = xyz2lab((0.0193339 * b + 0.1191920 * a + 0.9503041 * l) / Zn);
+	    return new Lab(116 * y - 16, 500 * (x - y), 200 * (y - z), o.opacity);
+	  }
+	
+	  function lab(l, a, b, opacity) {
+	    return arguments.length === 1 ? labConvert(l) : new Lab(l, a, b, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Lab(l, a, b, opacity) {
+	    this.l = +l;
+	    this.a = +a;
+	    this.b = +b;
+	    this.opacity = +opacity;
+	  }
+	
+	  define(Lab, lab, extend(Color, {
+	    brighter: function(k) {
+	      return new Lab(this.l + Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
+	    },
+	    darker: function(k) {
+	      return new Lab(this.l - Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
+	    },
+	    rgb: function() {
+	      var y = (this.l + 16) / 116,
+	          x = isNaN(this.a) ? y : y + this.a / 500,
+	          z = isNaN(this.b) ? y : y - this.b / 200;
+	      y = Yn * lab2xyz(y);
+	      x = Xn * lab2xyz(x);
+	      z = Zn * lab2xyz(z);
+	      return new Rgb(
+	        xyz2rgb( 3.2404542 * x - 1.5371385 * y - 0.4985314 * z), // D65 -> sRGB
+	        xyz2rgb(-0.9692660 * x + 1.8760108 * y + 0.0415560 * z),
+	        xyz2rgb( 0.0556434 * x - 0.2040259 * y + 1.0572252 * z),
+	        this.opacity
+	      );
+	    }
+	  }));
+	
+	  function xyz2lab(t) {
+	    return t > t3 ? Math.pow(t, 1 / 3) : t / t2 + t0;
+	  }
+	
+	  function lab2xyz(t) {
+	    return t > t1 ? t * t * t : t2 * (t - t0);
+	  }
+	
+	  function xyz2rgb(x) {
+	    return 255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055);
+	  }
+	
+	  function rgb2xyz(x) {
+	    return (x /= 255) <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+	  }
+	
+	  function hclConvert(o) {
+	    if (o instanceof Hcl) return new Hcl(o.h, o.c, o.l, o.opacity);
+	    if (!(o instanceof Lab)) o = labConvert(o);
+	    var h = Math.atan2(o.b, o.a) * rad2deg;
+	    return new Hcl(h < 0 ? h + 360 : h, Math.sqrt(o.a * o.a + o.b * o.b), o.l, o.opacity);
+	  }
+	
+	  function hcl(h, c, l, opacity) {
+	    return arguments.length === 1 ? hclConvert(h) : new Hcl(h, c, l, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Hcl(h, c, l, opacity) {
+	    this.h = +h;
+	    this.c = +c;
+	    this.l = +l;
+	    this.opacity = +opacity;
+	  }
+	
+	  define(Hcl, hcl, extend(Color, {
+	    brighter: function(k) {
+	      return new Hcl(this.h, this.c, this.l + Kn * (k == null ? 1 : k), this.opacity);
+	    },
+	    darker: function(k) {
+	      return new Hcl(this.h, this.c, this.l - Kn * (k == null ? 1 : k), this.opacity);
+	    },
+	    rgb: function() {
+	      return labConvert(this).rgb();
+	    }
+	  }));
+	
+	  var A = -0.14861;
+	  var B = +1.78277;
+	  var C = -0.29227;
+	  var D = -0.90649;
+	  var E = +1.97294;
+	  var ED = E * D;
+	  var EB = E * B;
+	  var BC_DA = B * C - D * A;
+	  function cubehelixConvert(o) {
+	    if (o instanceof Cubehelix) return new Cubehelix(o.h, o.s, o.l, o.opacity);
+	    if (!(o instanceof Rgb)) o = rgbConvert(o);
+	    var r = o.r / 255,
+	        g = o.g / 255,
+	        b = o.b / 255,
+	        l = (BC_DA * b + ED * r - EB * g) / (BC_DA + ED - EB),
+	        bl = b - l,
+	        k = (E * (g - l) - C * bl) / D,
+	        s = Math.sqrt(k * k + bl * bl) / (E * l * (1 - l)), // NaN if l=0 or l=1
+	        h = s ? Math.atan2(k, bl) * rad2deg - 120 : NaN;
+	    return new Cubehelix(h < 0 ? h + 360 : h, s, l, o.opacity);
+	  }
+	
+	  function cubehelix(h, s, l, opacity) {
+	    return arguments.length === 1 ? cubehelixConvert(h) : new Cubehelix(h, s, l, opacity == null ? 1 : opacity);
+	  }
+	
+	  function Cubehelix(h, s, l, opacity) {
+	    this.h = +h;
+	    this.s = +s;
+	    this.l = +l;
+	    this.opacity = +opacity;
+	  }
+	
+	  define(Cubehelix, cubehelix, extend(Color, {
+	    brighter: function(k) {
+	      k = k == null ? brighter : Math.pow(brighter, k);
+	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
+	    },
+	    darker: function(k) {
+	      k = k == null ? darker : Math.pow(darker, k);
+	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
+	    },
+	    rgb: function() {
+	      var h = isNaN(this.h) ? 0 : (this.h + 120) * deg2rad,
+	          l = +this.l,
+	          a = isNaN(this.s) ? 0 : this.s * l * (1 - l),
+	          cosh = Math.cos(h),
+	          sinh = Math.sin(h);
+	      return new Rgb(
+	        255 * (l + a * (A * cosh + B * sinh)),
+	        255 * (l + a * (C * cosh + D * sinh)),
+	        255 * (l + a * (E * cosh)),
+	        this.opacity
+	      );
+	    }
+	  }));
+	
+	  var version = "0.4.2";
+	
+	  exports.version = version;
+	  exports.color = color;
+	  exports.rgb = rgb;
+	  exports.hsl = hsl;
+	  exports.lab = lab;
+	  exports.hcl = hcl;
+	  exports.cubehelix = cubehelix;
 	
 	}));
 

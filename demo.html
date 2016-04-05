@@ -3,26 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <title>ndarray-heatmap demo</title>
-    <script src="dist/ndarray-heatmap.min.js"></script>
+    <script src="dist/ndarray-heatmap.js"></script>
     <script>
     window.addEventListener('load', function() {
-        var shape = [100, 100];
+        var shape = [512, 512];
         var data = new Array(shape[0]);
         for(var i = 0; i < shape[0]; ++i) {
             data[i] = new Array(shape[1]);
             for(var j = 0; j < shape[1]; ++j) {
-                data[i][j] = j * shape[0] + i;
+                data[i][j] = j * Math.sin(i*Math.PI/2 / shape[0]);
             }
         }
         var renderer = heatmap.heatmap()
             .data(data)
-            .colorSteps(3)
+            .colorSteps(32)
             .colorRange(
-                    // ColorBrewer RdYlBu 3
+                    // ColorBrewer YlGnBu 5
                     // be careful with multi-hue scales
                     // use only predefined stops from color brewer
                     // https://vis4.net/blog/posts/mastering-multi-hued-color-scales/
-              ["rgb(252,141,89)", "rgb(255,255,191)", "rgb(145,191,219)"]
+                    //["#ffffcc","#a1dab4","#41b6c4","#2c7fb8","#253494"]
+                    ["rgba(255,255,204,0)", "rgba(161,218,180,0.6)", "rgba(65,182,196,1)", "rgba(44,127,184,1)", "rgba(37,52,148,1)"]
             )
             ;
         var canvas = renderer();
