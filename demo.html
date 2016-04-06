@@ -4,31 +4,112 @@
     <meta charset="UTF-8">
     <title>ndarray-heatmap demo</title>
     <script src="dist/ndarray-heatmap.js"></script>
-    <script>
-    window.addEventListener('load', function() {
-        var shape = [512, 512];
-        var data = new Array(shape[0]);
-        for(var i = 0; i < shape[0]; ++i) {
-            data[i] = new Array(shape[1]);
-            for(var j = 0; j < shape[1]; ++j) {
-                data[i][j] = j * Math.sin(i*Math.PI/2 / shape[0]);
-            }
+    <style>
+        body {
+            margin: 0;
+            background: #EEE;
+            background-image: linear-gradient(45deg, #CCC 25%, transparent 25%, transparent 75%, #CCC 75%, #CCC 100%),
+            linear-gradient(45deg, #CCC 25%, transparent 25%, transparent 75%, #CCC 75%, #CCC 100%);
+            background-size: 32px 32px;
+            background-position: 0 0, 16px 16px;
         }
-        var renderer = heatmap.heatmap()
-            .data(data)
-            .colorSteps(32)
-            .colorRange(
-                    // ColorBrewer YlGnBu 5
-                    // be careful with multi-hue scales
-                    // use only predefined stops from color brewer
-                    // https://vis4.net/blog/posts/mastering-multi-hued-color-scales/
-                    //["#ffffcc","#a1dab4","#41b6c4","#2c7fb8","#253494"]
-                    ["rgba(255,255,204,0)", "rgba(161,218,180,0.6)", "rgba(65,182,196,1)", "rgba(44,127,184,1)", "rgba(37,52,148,1)"]
-            )
-            ;
-        var canvas = renderer();
-        document.body.appendChild(canvas);
-    });
+    </style>
+    <script>
+        window.addEventListener('load', function () {
+            var renderer, canvas;
+            var shape = [512, 256];
+            var data = new Array(shape[0]);
+            for (var i = 0; i < shape[0]; ++i) {
+                data[i] = new Array(shape[1]);
+                for (var j = 0; j < shape[1]; ++j) {
+                    data[i][j] = j * Math.sin(i * Math.PI / 2 / shape[0]);
+                }
+            }
+            var steps = 112;
+
+            // be careful with multi-hue scales
+            // use only predefined stops from color brewer
+            // https://vis4.net/blog/posts/mastering-multi-hued-color-scales/
+
+            var testScales = [
+                {
+                    name: 'bi',
+                    scale: ['black','white']
+                },
+                {
+                    name: 'bi',
+                    scale: ['red','blue']
+                },
+                {
+                    name: 'duo',
+                    scale: [['red','red'], ['blue','blue']]
+                },
+                {
+                    name: 'simple',
+                    scale: heatmap.colorbrewer.YlGnBu[5]
+                },
+                {
+                    name: 'simpleMixed',
+                    scale: [
+                        "rgba(255,255,204,0)",
+                        "rgba(161,218,180,1)",
+                        "rgba(65,182,196,1)",
+                        "rgba(44,127,184,1)",
+                        "rgba(37,52,148,1)"
+                    ]
+                },
+                {
+                    name: 'joined',
+                    scale: [
+                        heatmap.colorbrewer.Blues[5].slice(),
+                        heatmap.colorbrewer.Blues[5].slice().reverse(),
+                        heatmap.colorbrewer.Blues[5].slice()
+                    ]
+                },
+                {
+                    name: 'joinedWithBreaks',
+                    scale: [
+                        [heatmap.colorbrewer.Blues[5].slice(), 0.8],
+                        heatmap.colorbrewer.Blues[5].slice()
+                    ]
+                },
+                {
+                    name: 'mixed',
+                    scale: [
+                        "rgba(65,182,196,0)",
+                        "rgba(65,182,196,0.5)",
+                        "rgba(44,127,184,1)",
+                        "rgb(37,52,148)",
+                        [["rgba(37,52,148,1)", "#ffffd4"], 0.002],
+                        // for smooth "anti-aliased" breaks add a narrow width
+                        // which connect the neighboring end-color ranges
+                        // for god results increase color steps accordingly
+                        [heatmap.colorbrewer.YlOrBr[5].slice(), 0.400],
+                        [heatmap.colorbrewer.Blues[5].slice().reverse(), 0.125],
+                        "blue",
+                        "red",
+                        heatmap.colorbrewer.Blues[5].slice(),
+                        [heatmap.colorbrewer.Blues[5].slice().reverse()],
+                        "red",
+                        "rgba(255,0,0,0)"
+                    ]
+                }
+            ];
+
+            function renderScale(colorScale){
+                var renderer = heatmap.heatmap()
+                        .data(data)
+                        .colorSteps(steps)
+                        .colorRange(colorScale);
+                var canvas = renderer();
+                document.body.appendChild(canvas);
+            }
+
+            testScales.forEach(function(scale){
+                renderScale(scale.scale);
+            });
+        })
+        ;
     </script>
 </head>
 <body>
