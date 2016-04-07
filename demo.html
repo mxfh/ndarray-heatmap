@@ -25,140 +25,227 @@
                     data[i][j] = j * Math.sin(i * Math.PI / 2 / shape[0]);
                 }
             }
-            var steps = 5048;
+            var steps = 1024;
+            var smallSizeFactor = 0.25;
+
 
             // be careful with multi-hue scales
             // use only predefined stops from color brewer
             // https://vis4.net/blog/posts/mastering-multi-hued-color-scales/
 
+            var selectedScale = ['proper'];
+
             var testScales = [
                 {
-                    name: 'monostring',
-                    scale: 'red'
+                    name: 'proper',
+                    scale: [
+                        {color: 'red'},
+                        {color: 'blue'},
+                        {color: 'yellow'}
+                    ]
                 },
                 {
-                    name: 'mono',
-                    scale: ['red']
-                },
-                {
-                    name: 'bi',
-                    scale: ['black', 'white']
-                },
-                {
-                    name: 'bi',
-                    scale: ['red', 'blue']
-                },
-                {
-                    name: 'duo',
-                    scale: [['red', 'red'], ['blue', 'blue']]
-                },
-                {
-                    name: 'duoflat',
-                    scale: [['red'], ['blue']]
-                },
-                {
-                    name: 'duoflat explicit',
-                    scale: [['red', 'blue'], {style: 'flat'}]
+                    name: 'proper2',
+                    scale: [
+                        {color: 'red', width: 0.25},
+                        {color: 'blue', width: 0.25},
+                        {color: 'yellow'}
+                    ]
                 }, {
-                    name: 'duoProperNameFromOptions',
-                    scale: {
-                        name: 'duoProperNameFromObj',
-                        colorRange: ['red', 'blue'],
-                        style: 'flat'
-                    }
-                },
-                {
-                    name: 'simple',
-                    scale: heatmap.colorbrewer.YlGnBu[5]
-                },
-                {
-                    name: 'simpleMixed',
+                    name: 'proper3',
                     scale: [
-                        "rgba(255,255,204,0)",
-                        "rgba(161,218,180,1)",
-                        "rgba(65,182,196,1)",
-                        "rgba(44,127,184,1)",
-                        "rgba(37,52,148,1)"
+                        {color: ['red', 'blue', 'yellow'], width: 0.5},
+                        {color: 'blue'},
+                        {color: 'yellow'}
                     ]
                 },
                 {
-                    name: 'joined',
-                    scale: [
-                        heatmap.colorbrewer.Blues[5].slice(),
-                        heatmap.colorbrewer.Blues[5].slice().reverse(),
-                        heatmap.colorbrewer.Blues[5].slice()
-                    ]
+                    name: 'proper4',
+                    scale:
+                        {   name: 'ynlb',
+                            color: [
+                                "rgba(255,255,204,1)",
+                                "rgba(161,218,180,1)",
+                                "rgba(65,182,196,0.5)",
+                                "rgba(44,127,184,1)",
+                                "rgba(37,52,148,1)"
+                            ]
+                        }
                 },
                 {
-                    name: 'joinedWithBreaks',
-                    scale: [
-                        [heatmap.colorbrewer.Blues[5].slice(), 0.8],
-                        heatmap.colorbrewer.Blues[5].slice()
-                    ]
-                },
-                {
-                    name: 'mixed',
-                    scale: [
-                        "rgba(65,182,196,0)",
-                        "rgba(65,182,196,0.5)",
-                        "rgba(44,127,184,1)",
-                        "rgb(37,52,148)",
-                        [["rgba(37,52,148,1)", "#ffffd4"], 0.002],
-                        // for smooth "anti-aliased" breaks add a narrow width
-                        // which connect the neighboring end-color ranges
-                        // for god results increase color steps accordingly
-                        [heatmap.colorbrewer.YlOrBr[5].slice(), 0.200],
-                        ["red", 0.1],
-                        [heatmap.colorbrewer.Blues[5].slice().reverse(), 0.125],
-                        "blue",
-                        "red",
-                        heatmap.colorbrewer.Blues[5].slice(),
-                        "red",
-                        [heatmap.colorbrewer.Blues[5].slice().reverse()],
-                        "red",
-                        "rgba(255,0,0,0)"
-                    ]
-                },
-                {
-                    name: 'iso',
-                    scale: [
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
-                        [["rgba(0,0,0,0)","rgba(0,0,0,1)","rgba(0,0,0,0)"],0.01]
-                     ]
+                        name: 'bare',
+                        color: [
+                            "rgba(255,255,204,1)",
+                            "rgba(161,218,180,1)",
+                            "rgba(65,182,196,0.5)",
+                            "rgba(44,127,184,1)",
+                            "rgba(37,52,148,1)"
+                        ]
+
                 }
+
+
+                /*
+                 {
+                 name: 'monostring',
+                 scale: 'red'
+                 },
+                 {
+                 name: 'mono',
+                 scale: ['red']
+                 },
+                 {
+                 name: 'bi',
+                 scale: ['black', 'white']
+                 },
+                 {
+                 name: 'duo',
+                 scale: [['red', 'red'], ['blue', 'blue']]
+                 },
+                 {
+                 name: 'duoflat',
+                 scale: [['red'], ['blue']]
+                 },
+                 {
+                 name: 'duoflat explicit',
+                 scale: [['red', 'blue'], {style: 'flat'}]
+                 }, {
+                 name: 'duoProperNameFromOptions',
+                 scale: {
+                 name: 'duoProperNameFromObj',
+                 colorRange: ['red', 'blue'],
+                 style: 'flat'
+                 }
+                 },
+                 {
+                 name: 'simple',
+                 scale: heatmap.colorbrewer.YlGnBu[5]
+                 },
+                 {
+                 name: 'simpleMixed',
+                 scale: [
+                 "rgba(255,255,204,0)",
+                 "rgba(161,218,180,1)",
+                 "rgba(65,182,196,1)",
+                 "rgba(44,127,184,1)",
+                 "rgba(37,52,148,1)"
+                 ]
+                 },
+                 {
+                 name: 'joined',
+                 scale: [
+                 heatmap.colorbrewer.Blues[5].slice(),
+                 heatmap.colorbrewer.Blues[5].slice().reverse(),
+                 heatmap.colorbrewer.Blues[5].slice()
+                 ]
+                 },
+                 {
+                 name: 'joinedWithBreaks',
+                 scale: [
+                 [heatmap.colorbrewer.Blues[5].slice(), 0.8],
+                 heatmap.colorbrewer.Blues[5].slice()
+                 ]
+                 },
+                 {
+                 name: 'mixed',
+                 scale: [
+                 "rgba(65,182,196,0)",
+                 "rgba(65,182,196,0.5)",
+                 "rgba(44,127,184,1)",
+                 "rgb(37,52,148)",
+                 [["rgba(37,52,148,1)", "#ffffd4"], 0.002],
+                 // for smooth "anti-aliased" breaks add a narrow width
+                 // which connect the neighboring end-color ranges
+                 // for god results increase color steps accordingly
+                 [heatmap.colorbrewer.YlOrBr[5].slice(), 0.200],
+                 ["red", 0.1],
+                 [heatmap.colorbrewer.Blues[5].slice().reverse(), 0.125],
+                 "blue",
+                 "red",
+                 heatmap.colorbrewer.Blues[5].slice(),
+                 "red",
+                 [heatmap.colorbrewer.Blues[5].slice().reverse()],
+                 "red",
+                 "rgba(255,0,0,0)"
+                 ]
+                 },
+                 {
+                 name: 'iso',
+                 scale: [
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,0)", "rgba(0,0,0,0)"], 0.09],
+                 [["rgba(0,0,0,0)", "rgba(0,0,0,1)", "rgba(0,0,0,0)"], 0.01]
+                 ]
+                 }, {
+                 name: 'iso2 mixed',
+                 scale: [
+                 [["rgba(255,255,204,0.5)"], 0.15],
+                 ["rgba(255,255,204,1)", 0.05],
+                 [["rgba(161,218,180,0.5)"], 0.8]
+                 [["rgba(161,218,180,1)"],0.05],
+                 ["rgba(65,182,196,0.5)",0.15],
+                 ["rgba(65,182,196,1)",0.05],
+                 [["rgba(44,127,184,0.5)","rgba(44,127,184,0.5)"],0.15],
+                 [["rgba(44,127,184,0.5","rgba(44,127,184,1","rgba(44,127,184,1","rgba(37,52,148,0.5)"],0.05],
+                 [["rgba(37,52,148,0.5)", "rgba(37,52,148,0.5)"],0.15],
+                 [["rgba(37,52,148,1)", "rgba(37,52,148,1)"],0.05]
+
+                 ]
+                 */
             ];
 
-            function renderScale(colorScale, options) {
+            function renderScale(colorScale, options, canvasSize) {
                 var renderer = heatmap.heatmap()
                         .data(data)
                         .colorSteps(steps)
                         .options(options)
                         .colorRange(colorScale);
                 var canvas = renderer();
+                if (canvasSize) {
+                    canvas.style.width = options.canvasSize.width;
+                    canvas.style.height = options.canvasSize.height;
+                }
                 document.body.appendChild(canvas);
             }
 
-            testScales.forEach(function (scale) {
-                renderScale(scale.scale,{name: scale.name});
+            var selectedScales = testScales.filter(function (obj) {
+                if (selectedScale === undefined || !selectedScale || selectedScale === "") return true;
+                if (typeof selectedScale === 'string') return obj.name == selectedScale;
+                if (Array.isArray(selectedScale)) return selectedScale.indexOf(obj.name) > -1;
             });
+
+            testScales.forEach(function (scale) {
+                renderScale(scale, {
+                            name: scale.name
+                        }, {
+                            height: smallSizeFactor * shape[0] + 'px',
+                            width: smallSizeFactor * shape[1] + 'px'
+                        }
+                );
+            });
+
+            selectedScales.forEach(function (scale) {
+                renderScale(scale, {selected: true});
+            });
+
+
         })
         ;
     </script>

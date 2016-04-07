@@ -2,37 +2,79 @@ import {interpolateLab} from 'd3-interpolate';
 import {scaleLinear} from 'd3-scale';
 import {rgb} from 'd3-color';
 
-var LinearGradient = function (range, options) {
-  if (typeof range == 'object' && range.hasOwnProperty('colorRange')) {
-    for (var prop in range) {
-      if (range.hasOwnProperty(prop)) {
-        this[prop] = range[prop];
-      }
-    }
-  } else {
-    this.colorRange = range;
-  }
-  // patse options from obkect in array
-  var last = range[range.length -1];
-  if (range.length > 1 && typeof last == 'object' && !Array.isArray(last)) {
-    for (var prop in last) {
-      if (last.hasOwnProperty(prop)) {
-        if(this[prop] !== undefined) console.info('overiding options',this[prop], last[prop]);
-        this[prop] = last[prop];
-      }
-    }
-  }
-
-  for (var prop in options) {
-    if (options.hasOwnProperty(prop)) {
-      if(this[prop] !== undefined) console.info('overiding options',this[prop], options[prop]);
-      this[prop] = options[prop];
-    }
-  }
-  this.colorRange = parseRange(this.colorRange, this);
+var LinearGradient = function (obj, options) {
+  this.scale = parseGradientObject(obj);
+  this.name = options.name || obj.name;
 };
-LinearGradient.prototype.style = 'continuous';
 
+function parseGradientObject(obj) {
+  // normalize
+  if (obj.hasOwnProperty('color')) {
+    obj.scale = color;
+  }
+  if (obj.hasOwnProperty('scale')) {
+    if (obj.scale.hasOwnProperty('color')) {
+      obj.scale = [color];
+    }
+    obj.scale.forEach(function (segment, i) {
+      if (!segment.hasOwnProperty('width')) {
+        obj.scale[i].width = NaN;
+      }
+      if (segment.hasOwnProperty('color')) {
+        // pad single colors to full width
+        let color = segment.color;
+        if (Array.isArray(color) && color.length === 1) {
+          obj.scale[i].color.push(color[0])
+        }
+        if (typeof color === 'string') {
+          obj.scale[i].color = [color,color]
+        }
+      }
+    });
+    obj.scale = setWidths(obj.scale);
+  }
+  return obj;
+}
+
+
+function setWidths(scale) {
+  return distributeUndeclaredWidths(
+    collectDeclaredWidths(scale)
+  );
+}
+
+function collectDeclaredWidths(scale) {
+  var sum = 0;
+  var count = 0;
+  scale.forEach(function (r, i) {
+    if (!isNaN(r.width)) {
+      sum += color.widths[i];
+      count += 1;
+    }
+  });
+  return {
+    scale:scale,
+    sum: sum,
+    count: count
+  };
+}
+
+function distributeUndeclaredWidths(o) {
+  var scale = o.scale;
+  let l = scale.length - o.count;
+  let remainder = 1 - o.sum;
+  var lastRemainder, lastUndeclared;
+  let width = remainder / l;
+  scale.forEach(function (r, i) {
+    if (isNaN(r)) {
+      lastRemainder = remainder;
+      lastUndeclared = scale[i];
+      remainder -= width;
+      scale[i].width = width;
+    }
+  });
+  return scale;
+}
 function fillColorScale(range, steps) {
   if (range.length >= 2) {
     let colors = [];
@@ -71,49 +113,6 @@ function collectStrings(arr) {
   return arrOfArr;
 }
 
-function collectDeclaredWidths(arr) {
-  let width = 0;
-  let count = 0;
-  arr.forEach(function (r) {
-    if (
-      Array.isArray(r[0]) &&
-      typeof r[1] === 'number' &&
-      r[1] > 0 &&
-      r[1] <= 1
-    ) {
-      width += r[1];
-      count += 1;
-    }
-  });
-  return {
-    width: width,
-    count: count
-  };
-}
-
-function distributeUndeclaredWidths(arr, reserved) {
-  let l = arr.length - reserved.count;
-  let remainder = 1 - reserved.width;
-  var lastRemainder, lastUndeclared;
-  let width = remainder / l;
-
-  arr.forEach(function (r, i) {
-    if (!(
-        Array.isArray(r[0]) && typeof r[1] === 'number' &&
-        r[1] > 0 &&
-        r[1] <= 1
-      )) {
-      lastRemainder = remainder;
-      lastUndeclared = arr[i];
-      remainder -= width;
-      arr[i] = [r, width];
-    }
-  });
-  if (remainder !== 0) {
-    lastUndeclared = lastRemainder;
-  }
-  return arr;
-}
 
 function dropNarrowRanges(normalized) {
   var rInput = normalized.range.slice();
@@ -159,41 +158,13 @@ function dropNarrowRanges(normalized) {
   return normalized;
 }
 
-function padOutSingleMemberArrays(range) {
-  range.forEach(function (current,i) {
-    if (Array.isArray(current) && current.length === 1 && typeof current[0] === 'string') {
-      range[i].push(current[0]);
-    }
-  });
-  return range;
-}
-
-function flattenExplicit(r) {
-    r.forEach(function (e, i) {
-    r[i] = [e,e];
-  });
-  return r;
-}
-
-function parseRange(range, options) {
-  if (typeof range == 'string') range = [range];
-  range = collectStrings(range);
-  if (options.style === 'flat' && Array.isArray(range)) {
-    range = flattenExplicit(range[0]);
-  }
-  range = padOutSingleMemberArrays(range);
-  console.log(range);
-  let reservedWidth = collectDeclaredWidths(range);
-  return distributeUndeclaredWidths(range, reservedWidth);
-}
-
 function collectNormalizedRanges(gradient, steps) {
   var sum = 0;
   var totalSteps = 0;
   var tmp;
   var threshold = 0.00001;
   var equalRanges = true;
-  var range = gradient.colorRange;
+  var range = gradient.scale;
   range.forEach(function (a) {
     sum += a[1];
     totalSteps += a[0].length;
@@ -221,8 +192,11 @@ function collectNormalizedRanges(gradient, steps) {
 
 function makeColorScale(range, steps, options) {
   var gradient = new LinearGradient(range, options);
+  //console.log(gradient);
+
   gradient = collectNormalizedRanges(gradient, steps);
-  console.log(gradient);
+  if (options.selected) console.log(gradient);
+  /*
   steps = gradient.normalized.steps;
   range = gradient.normalized.range;
   var fullSteps;
@@ -246,7 +220,8 @@ function makeColorScale(range, steps, options) {
       'calculated color steps dont match up', usedSteps, steps, range, colors
     );
   }
-  return colors;
+  */
+  return gradient;
 }
 
 export {
