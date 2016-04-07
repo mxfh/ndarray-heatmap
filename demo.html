@@ -12,12 +12,12 @@
             linear-gradient(45deg, #CCC 25%, transparent 25%, transparent 75%, #CCC 75%, #CCC 100%);
             background-size: 32px 32px;
             background-position: 0 0, 16px 16px;
+            line-height: 0;
         }
     </style>
     <script>
         window.addEventListener('load', function () {
-            var renderer, canvas;
-            var shape = [512, 256];
+            var shape = [128, 256];
             var data = new Array(shape[0]);
             for (var i = 0; i < shape[0]; ++i) {
                 data[i] = new Array(shape[1]);
@@ -25,7 +25,7 @@
                     data[i][j] = j * Math.sin(i * Math.PI / 2 / shape[0]);
                 }
             }
-            var steps = 112;
+            var steps = 500;
 
             // be careful with multi-hue scales
             // use only predefined stops from color brewer
@@ -33,16 +33,39 @@
 
             var testScales = [
                 {
-                    name: 'bi',
-                    scale: ['black','white']
+                    name: 'monostring',
+                    scale: 'red'
+                },
+                {
+                    name: 'mono',
+                    scale: ['red']
                 },
                 {
                     name: 'bi',
-                    scale: ['red','blue']
+                    scale: ['black', 'white']
+                },
+                {
+                    name: 'bi',
+                    scale: ['red', 'blue']
                 },
                 {
                     name: 'duo',
-                    scale: [['red','red'], ['blue','blue']]
+                    scale: [['red', 'red'], ['blue', 'blue']]
+                },
+                {
+                    name: 'duoflat',
+                    scale: [['red'], ['blue']]
+                },
+                {
+                    name: 'duoflat explicit',
+                    scale: [['red', 'blue'], {style: 'flat'}]
+                }, {
+                    name: 'duoProperNameFromOptions',
+                    scale: {
+                        name: 'duoProperNameFromObj',
+                        colorRange: ['red', 'blue'],
+                        style: 'flat'
+                    }
                 },
                 {
                     name: 'simple',
@@ -84,29 +107,57 @@
                         // for smooth "anti-aliased" breaks add a narrow width
                         // which connect the neighboring end-color ranges
                         // for god results increase color steps accordingly
-                        [heatmap.colorbrewer.YlOrBr[5].slice(), 0.400],
+                        [heatmap.colorbrewer.YlOrBr[5].slice(), 0.200],
+                        ["red", 0.1],
                         [heatmap.colorbrewer.Blues[5].slice().reverse(), 0.125],
                         "blue",
                         "red",
                         heatmap.colorbrewer.Blues[5].slice(),
+                        "red",
                         [heatmap.colorbrewer.Blues[5].slice().reverse()],
                         "red",
                         "rgba(255,0,0,0)"
                     ]
+                },
+                {
+                    name: 'iso',
+                    scale: [
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01],
+                        [["rgba(0,0,0,0)","rgba(0,0,0,0)"],0.09],
+                        [["rgba(0,0,0,1)","rgba(0,0,0,1)"],0.01]
+                     ]
                 }
             ];
 
-            function renderScale(colorScale){
+            function renderScale(colorScale, options) {
                 var renderer = heatmap.heatmap()
                         .data(data)
                         .colorSteps(steps)
+                        .options(options)
                         .colorRange(colorScale);
                 var canvas = renderer();
                 document.body.appendChild(canvas);
             }
 
-            testScales.forEach(function(scale){
-                renderScale(scale.scale);
+            testScales.forEach(function (scale) {
+                renderScale(scale.scale,{name: scale.name});
             });
         })
         ;

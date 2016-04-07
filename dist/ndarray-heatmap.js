@@ -73,19 +73,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	var _d3Array = __webpack_require__(10);
 	
-	var _d3Interpolate = __webpack_require__(11);
-	
-	var _d3Scale = __webpack_require__(13);
-	
-	var _d3Color = __webpack_require__(20);
-	
-	var _colorbrewer = __webpack_require__(21);
+	var _colorbrewer = __webpack_require__(11);
 	
 	var _colorbrewer2 = _interopRequireDefault(_colorbrewer);
 	
+	var _linearGradient = __webpack_require__(13);
+	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
-	function renderToCanvas(ndArr, imgArray, colorTable, l, min, range, imgWidth) {
+	function renderToCanvas(ndArr, imgArray, colorTable, min, max, imgWidth) {
+	  // premultiply constant values
+	  var range = max - min + 1; // add one for padding to equal spaced
+	  var l = colorTable.length;
 	  for (var y = 0; y < ndArr.shape[0]; ++y) {
 	    var yIndex = imgWidth * y;
 	    for (var x = 0; x < ndArr.shape[1]; ++x) {
@@ -103,193 +102,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  var colorSteps = 256;
 	  var domain = null;
 	  var colorRange = fallBackColorScale;
-	
-	  // =============================================
-	  // colorscale handling to be moved to own module
-	  // =============================================
-	
-	  function fillColorScale(range, steps) {
-	    if (range.length >= 2) {
-	      var colors = [];
-	      var stops = [];
-	      var l = range.length;
-	      var s = steps - 1;
-	      for (var i = 0; i < l; i++) {
-	        stops.push(s * i / (l - 1));
-	      }
-	      var colorScale = (0, _d3Scale.scaleLinear)().domain(stops).range(range).interpolate(_d3Interpolate.interpolateLab);
-	      for (var _i = 0; _i < steps; ++_i) {
-	        colors.push((0, _d3Color.rgb)(colorScale(_i)));
-	      }
-	      return colors;
-	    } else {
-	      return false;
-	    }
-	  }
-	
-	  function collectStrings(arr) {
-	    var arrOfArr = [];
-	    var current = [];
-	    arr.forEach(function (r) {
-	      if (Array.isArray(r)) {
-	        if (current.length >= 2) {
-	          arrOfArr.push(current);
-	          current = [];
-	        }
-	        arrOfArr.push(r);
-	      } else if (typeof r === 'string') {
-	        current.push(r);
-	      }
-	    });
-	    if (current.length >= 2) {
-	      arrOfArr.push(current);
-	    }
-	    return arrOfArr;
-	  }
-	
-	  function collectDeclaredWidths(arr) {
-	    var width = 0;
-	    var count = 0;
-	    arr.forEach(function (r) {
-	      if (Array.isArray(r[0]) && typeof r[1] === 'number' && r[1] > 0 && r[1] <= 1) {
-	        width += r[1];
-	        count += 1;
-	      }
-	    });
-	    return {
-	      width: width,
-	      count: count
-	    };
-	  }
-	
-	  function distributeUndeclaredWidths(arr, reserved) {
-	    //console.log(arr,reserved);
-	    var l = arr.length - reserved.count;
-	    var remainder = 1 - reserved.width;
-	    var lastRemainder, lastUndeclared;
-	    var width = remainder / l;
-	
-	    arr.forEach(function (r, i) {
-	      if (!(Array.isArray(r[0]) && typeof r[1] === 'number' && r[1] > 0 && r[1] <= 1)) {
-	        lastRemainder = remainder;
-	        lastUndeclared = arr[i];
-	        remainder -= width;
-	        arr[i] = [r, width];
-	      }
-	    });
-	    if (remainder !== 0) {
-	      lastUndeclared = lastRemainder;
-	    }
-	    return arr;
-	  }
-	
-	  function dropNarrowRanges(normalized) {
-	    var rInput = normalized.range.slice();
-	    var ranges = [];
-	    var dropped = [];
-	    var minimum = 1 / normalized.steps;
-	    rInput.forEach(function (r, i) {
-	      if (r[1] < minimum) {
-	        // redistribute
-	        if (i === 0) {
-	          rInput[i + 1][1] += r[1];
-	        } else if (i === rInput.length - 1) {
-	          ranges[ranges.length - 1][1] += r[1];
-	        } else {
-	          ranges[ranges.length - 1][1] += r[1] / 2;
-	          rInput[i + 1][1] += r[1] / 2;
-	        }
-	        dropped.push(r);
-	        normalized.steps -= r[0].length;
-	      } else {
-	        ranges.push(r);
-	      }
-	    });
-	
-	    var iterate = 0;
-	    ranges.forEach(function (r) {
-	      if (r[1] < minimum) {
-	        iterate++;
-	      }
-	    });
-	
-	    if (dropped.length > 0) {
-	      console.log('iterate', iterate);
-	      console.log('dropped', dropped);
-	    }
-	
-	    normalized.range = ranges;
-	
-	    if (iterate > 0) {
-	      normalized = dropNarrowRanges(normalized);
-	    }
-	
-	    return normalized;
-	  }
-	
-	  function collectNormalizedRanges(range, steps) {
-	    var reservedWidth;
-	    var sum = 0;
-	    var totalSteps = 0;
-	    var tmp;
-	    var threshold = 0.00001;
-	    var equalRanges = true;
-	    range = collectStrings(range);
-	    reservedWidth = collectDeclaredWidths(range);
-	    range = distributeUndeclaredWidths(range, reservedWidth);
-	    range.forEach(function (a) {
-	      sum += a[1];
-	      totalSteps += a[0].length;
-	      if (equalRanges && tmp !== undefined && Math.abs(a[1] - tmp) > threshold) {
-	        equalRanges = false;
-	      }
-	      tmp = a[1];
-	    });
-	    if (sum !== 1) {
-	      console.warn('sum of range widths does not equal 1', sum, range);
-	    }
-	
-	    if (totalSteps > steps && equalRanges) {
-	      console.warn(steps, 'too few steps requested, increasing to', totalSteps);
-	      steps = totalSteps;
-	    }
-	    var normalized = {
-	      range: range,
-	      steps: steps
-	    };
-	    normalized = dropNarrowRanges(normalized);
-	    return normalized;
-	  }
-	
-	  function makeColorScale(range, steps) {
-	    var normalized = collectNormalizedRanges(range, steps);
-	    steps = normalized.steps;
-	    range = normalized.range;
-	    var fullSteps;
-	    var stepsAvailable = steps;
-	    var usedSteps = 0;
-	    var availableRange = 1;
-	    var colors = [];
-	    range.forEach(function (scale) {
-	      fullSteps = Math.round(stepsAvailable * scale[1] / availableRange);
-	      availableRange -= scale[1];
-	      if (fullSteps > 1 && stepsAvailable >= 2) {
-	        stepsAvailable -= fullSteps;
-	        usedSteps += fullSteps;
-	        colors = colors.concat(fillColorScale(scale[0], fullSteps));
-	      } else {
-	        console.info('dropped range', scale);
-	      }
-	    });
-	    if (usedSteps !== steps) {
-	      console.error('calculated color steps dont match up', usedSteps, steps, range, colors);
-	    }
-	    return colors;
-	  }
-	
-	  // =======================
-	  // end colorscale handling
-	  // =======================
+	  var options = undefined;
 	
 	  function buildColorTable(colors) {
 	    var typedArr = new Uint32Array(colors.length);
@@ -327,22 +140,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var min = _ref2[0];
 	    var max = _ref2[1];
 	
-	
-	    var colors = makeColorScale(colorRange, colorSteps);
-	    //console.log(colorRange, colors.length, colors);
-	    if (colors === false) {
-	      console.error('specify at least two colors', colorRange);
-	      colors = makeColorScale(fallBackColorScale, colorSteps);
-	    }
-	
+	    var colors = (0, _linearGradient.makeColorScale)(colorRange, colorSteps, options);
 	    var colorTable = buildColorTable(colors);
 	
-	    // premultiply constant values
-	    var range = max - min + 1; // add one for padding to equal spaced
-	    var l = colors.length;
-	
-	    renderToCanvas(data, buf32, colorTable, l, min, range, canvas.width);
-	
+	    renderToCanvas(data, buf32, colorTable, min, max, canvas.width);
 	    imgData.data.set(buf8);
 	    ctx.putImageData(imgData, 0, 0);
 	
@@ -362,6 +163,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	  render.colorSteps = function (_) {
 	    return arguments.length ? (colorSteps = _, render) : colorSteps;
+	  };
+	
+	  render.options = function (_) {
+	    return arguments.length ? (options = _, render) : options;
 	  };
 	
 	  render.domain = function (_) {
@@ -1908,8 +1713,590 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
+	module.exports = __webpack_require__(12);
+
+
+/***/ },
+/* 12 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_RESULT__;// This product includes color specifications and designs developed by Cynthia Brewer (http://colorbrewer.org/).
+	// JavaScript specs as packaged in the D3 library (d3js.org). Please see license at http://colorbrewer.org/export/LICENSE.txt
+	!function() {
+	
+	var colorbrewer = {YlGn: {
+	3: ["#f7fcb9","#addd8e","#31a354"],
+	4: ["#ffffcc","#c2e699","#78c679","#238443"],
+	5: ["#ffffcc","#c2e699","#78c679","#31a354","#006837"],
+	6: ["#ffffcc","#d9f0a3","#addd8e","#78c679","#31a354","#006837"],
+	7: ["#ffffcc","#d9f0a3","#addd8e","#78c679","#41ab5d","#238443","#005a32"],
+	8: ["#ffffe5","#f7fcb9","#d9f0a3","#addd8e","#78c679","#41ab5d","#238443","#005a32"],
+	9: ["#ffffe5","#f7fcb9","#d9f0a3","#addd8e","#78c679","#41ab5d","#238443","#006837","#004529"]
+	},YlGnBu: {
+	3: ["#edf8b1","#7fcdbb","#2c7fb8"],
+	4: ["#ffffcc","#a1dab4","#41b6c4","#225ea8"],
+	5: ["#ffffcc","#a1dab4","#41b6c4","#2c7fb8","#253494"],
+	6: ["#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#2c7fb8","#253494"],
+	7: ["#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#0c2c84"],
+	8: ["#ffffd9","#edf8b1","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#0c2c84"],
+	9: ["#ffffd9","#edf8b1","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#253494","#081d58"]
+	},GnBu: {
+	3: ["#e0f3db","#a8ddb5","#43a2ca"],
+	4: ["#f0f9e8","#bae4bc","#7bccc4","#2b8cbe"],
+	5: ["#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac"],
+	6: ["#f0f9e8","#ccebc5","#a8ddb5","#7bccc4","#43a2ca","#0868ac"],
+	7: ["#f0f9e8","#ccebc5","#a8ddb5","#7bccc4","#4eb3d3","#2b8cbe","#08589e"],
+	8: ["#f7fcf0","#e0f3db","#ccebc5","#a8ddb5","#7bccc4","#4eb3d3","#2b8cbe","#08589e"],
+	9: ["#f7fcf0","#e0f3db","#ccebc5","#a8ddb5","#7bccc4","#4eb3d3","#2b8cbe","#0868ac","#084081"]
+	},BuGn: {
+	3: ["#e5f5f9","#99d8c9","#2ca25f"],
+	4: ["#edf8fb","#b2e2e2","#66c2a4","#238b45"],
+	5: ["#edf8fb","#b2e2e2","#66c2a4","#2ca25f","#006d2c"],
+	6: ["#edf8fb","#ccece6","#99d8c9","#66c2a4","#2ca25f","#006d2c"],
+	7: ["#edf8fb","#ccece6","#99d8c9","#66c2a4","#41ae76","#238b45","#005824"],
+	8: ["#f7fcfd","#e5f5f9","#ccece6","#99d8c9","#66c2a4","#41ae76","#238b45","#005824"],
+	9: ["#f7fcfd","#e5f5f9","#ccece6","#99d8c9","#66c2a4","#41ae76","#238b45","#006d2c","#00441b"]
+	},PuBuGn: {
+	3: ["#ece2f0","#a6bddb","#1c9099"],
+	4: ["#f6eff7","#bdc9e1","#67a9cf","#02818a"],
+	5: ["#f6eff7","#bdc9e1","#67a9cf","#1c9099","#016c59"],
+	6: ["#f6eff7","#d0d1e6","#a6bddb","#67a9cf","#1c9099","#016c59"],
+	7: ["#f6eff7","#d0d1e6","#a6bddb","#67a9cf","#3690c0","#02818a","#016450"],
+	8: ["#fff7fb","#ece2f0","#d0d1e6","#a6bddb","#67a9cf","#3690c0","#02818a","#016450"],
+	9: ["#fff7fb","#ece2f0","#d0d1e6","#a6bddb","#67a9cf","#3690c0","#02818a","#016c59","#014636"]
+	},PuBu: {
+	3: ["#ece7f2","#a6bddb","#2b8cbe"],
+	4: ["#f1eef6","#bdc9e1","#74a9cf","#0570b0"],
+	5: ["#f1eef6","#bdc9e1","#74a9cf","#2b8cbe","#045a8d"],
+	6: ["#f1eef6","#d0d1e6","#a6bddb","#74a9cf","#2b8cbe","#045a8d"],
+	7: ["#f1eef6","#d0d1e6","#a6bddb","#74a9cf","#3690c0","#0570b0","#034e7b"],
+	8: ["#fff7fb","#ece7f2","#d0d1e6","#a6bddb","#74a9cf","#3690c0","#0570b0","#034e7b"],
+	9: ["#fff7fb","#ece7f2","#d0d1e6","#a6bddb","#74a9cf","#3690c0","#0570b0","#045a8d","#023858"]
+	},BuPu: {
+	3: ["#e0ecf4","#9ebcda","#8856a7"],
+	4: ["#edf8fb","#b3cde3","#8c96c6","#88419d"],
+	5: ["#edf8fb","#b3cde3","#8c96c6","#8856a7","#810f7c"],
+	6: ["#edf8fb","#bfd3e6","#9ebcda","#8c96c6","#8856a7","#810f7c"],
+	7: ["#edf8fb","#bfd3e6","#9ebcda","#8c96c6","#8c6bb1","#88419d","#6e016b"],
+	8: ["#f7fcfd","#e0ecf4","#bfd3e6","#9ebcda","#8c96c6","#8c6bb1","#88419d","#6e016b"],
+	9: ["#f7fcfd","#e0ecf4","#bfd3e6","#9ebcda","#8c96c6","#8c6bb1","#88419d","#810f7c","#4d004b"]
+	},RdPu: {
+	3: ["#fde0dd","#fa9fb5","#c51b8a"],
+	4: ["#feebe2","#fbb4b9","#f768a1","#ae017e"],
+	5: ["#feebe2","#fbb4b9","#f768a1","#c51b8a","#7a0177"],
+	6: ["#feebe2","#fcc5c0","#fa9fb5","#f768a1","#c51b8a","#7a0177"],
+	7: ["#feebe2","#fcc5c0","#fa9fb5","#f768a1","#dd3497","#ae017e","#7a0177"],
+	8: ["#fff7f3","#fde0dd","#fcc5c0","#fa9fb5","#f768a1","#dd3497","#ae017e","#7a0177"],
+	9: ["#fff7f3","#fde0dd","#fcc5c0","#fa9fb5","#f768a1","#dd3497","#ae017e","#7a0177","#49006a"]
+	},PuRd: {
+	3: ["#e7e1ef","#c994c7","#dd1c77"],
+	4: ["#f1eef6","#d7b5d8","#df65b0","#ce1256"],
+	5: ["#f1eef6","#d7b5d8","#df65b0","#dd1c77","#980043"],
+	6: ["#f1eef6","#d4b9da","#c994c7","#df65b0","#dd1c77","#980043"],
+	7: ["#f1eef6","#d4b9da","#c994c7","#df65b0","#e7298a","#ce1256","#91003f"],
+	8: ["#f7f4f9","#e7e1ef","#d4b9da","#c994c7","#df65b0","#e7298a","#ce1256","#91003f"],
+	9: ["#f7f4f9","#e7e1ef","#d4b9da","#c994c7","#df65b0","#e7298a","#ce1256","#980043","#67001f"]
+	},OrRd: {
+	3: ["#fee8c8","#fdbb84","#e34a33"],
+	4: ["#fef0d9","#fdcc8a","#fc8d59","#d7301f"],
+	5: ["#fef0d9","#fdcc8a","#fc8d59","#e34a33","#b30000"],
+	6: ["#fef0d9","#fdd49e","#fdbb84","#fc8d59","#e34a33","#b30000"],
+	7: ["#fef0d9","#fdd49e","#fdbb84","#fc8d59","#ef6548","#d7301f","#990000"],
+	8: ["#fff7ec","#fee8c8","#fdd49e","#fdbb84","#fc8d59","#ef6548","#d7301f","#990000"],
+	9: ["#fff7ec","#fee8c8","#fdd49e","#fdbb84","#fc8d59","#ef6548","#d7301f","#b30000","#7f0000"]
+	},YlOrRd: {
+	3: ["#ffeda0","#feb24c","#f03b20"],
+	4: ["#ffffb2","#fecc5c","#fd8d3c","#e31a1c"],
+	5: ["#ffffb2","#fecc5c","#fd8d3c","#f03b20","#bd0026"],
+	6: ["#ffffb2","#fed976","#feb24c","#fd8d3c","#f03b20","#bd0026"],
+	7: ["#ffffb2","#fed976","#feb24c","#fd8d3c","#fc4e2a","#e31a1c","#b10026"],
+	8: ["#ffffcc","#ffeda0","#fed976","#feb24c","#fd8d3c","#fc4e2a","#e31a1c","#b10026"],
+	9: ["#ffffcc","#ffeda0","#fed976","#feb24c","#fd8d3c","#fc4e2a","#e31a1c","#bd0026","#800026"]
+	},YlOrBr: {
+	3: ["#fff7bc","#fec44f","#d95f0e"],
+	4: ["#ffffd4","#fed98e","#fe9929","#cc4c02"],
+	5: ["#ffffd4","#fed98e","#fe9929","#d95f0e","#993404"],
+	6: ["#ffffd4","#fee391","#fec44f","#fe9929","#d95f0e","#993404"],
+	7: ["#ffffd4","#fee391","#fec44f","#fe9929","#ec7014","#cc4c02","#8c2d04"],
+	8: ["#ffffe5","#fff7bc","#fee391","#fec44f","#fe9929","#ec7014","#cc4c02","#8c2d04"],
+	9: ["#ffffe5","#fff7bc","#fee391","#fec44f","#fe9929","#ec7014","#cc4c02","#993404","#662506"]
+	},Purples: {
+	3: ["#efedf5","#bcbddc","#756bb1"],
+	4: ["#f2f0f7","#cbc9e2","#9e9ac8","#6a51a3"],
+	5: ["#f2f0f7","#cbc9e2","#9e9ac8","#756bb1","#54278f"],
+	6: ["#f2f0f7","#dadaeb","#bcbddc","#9e9ac8","#756bb1","#54278f"],
+	7: ["#f2f0f7","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#4a1486"],
+	8: ["#fcfbfd","#efedf5","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#4a1486"],
+	9: ["#fcfbfd","#efedf5","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#54278f","#3f007d"]
+	},Blues: {
+	3: ["#deebf7","#9ecae1","#3182bd"],
+	4: ["#eff3ff","#bdd7e7","#6baed6","#2171b5"],
+	5: ["#eff3ff","#bdd7e7","#6baed6","#3182bd","#08519c"],
+	6: ["#eff3ff","#c6dbef","#9ecae1","#6baed6","#3182bd","#08519c"],
+	7: ["#eff3ff","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5","#084594"],
+	8: ["#f7fbff","#deebf7","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5","#084594"],
+	9: ["#f7fbff","#deebf7","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5","#08519c","#08306b"]
+	},Greens: {
+	3: ["#e5f5e0","#a1d99b","#31a354"],
+	4: ["#edf8e9","#bae4b3","#74c476","#238b45"],
+	5: ["#edf8e9","#bae4b3","#74c476","#31a354","#006d2c"],
+	6: ["#edf8e9","#c7e9c0","#a1d99b","#74c476","#31a354","#006d2c"],
+	7: ["#edf8e9","#c7e9c0","#a1d99b","#74c476","#41ab5d","#238b45","#005a32"],
+	8: ["#f7fcf5","#e5f5e0","#c7e9c0","#a1d99b","#74c476","#41ab5d","#238b45","#005a32"],
+	9: ["#f7fcf5","#e5f5e0","#c7e9c0","#a1d99b","#74c476","#41ab5d","#238b45","#006d2c","#00441b"]
+	},Oranges: {
+	3: ["#fee6ce","#fdae6b","#e6550d"],
+	4: ["#feedde","#fdbe85","#fd8d3c","#d94701"],
+	5: ["#feedde","#fdbe85","#fd8d3c","#e6550d","#a63603"],
+	6: ["#feedde","#fdd0a2","#fdae6b","#fd8d3c","#e6550d","#a63603"],
+	7: ["#feedde","#fdd0a2","#fdae6b","#fd8d3c","#f16913","#d94801","#8c2d04"],
+	8: ["#fff5eb","#fee6ce","#fdd0a2","#fdae6b","#fd8d3c","#f16913","#d94801","#8c2d04"],
+	9: ["#fff5eb","#fee6ce","#fdd0a2","#fdae6b","#fd8d3c","#f16913","#d94801","#a63603","#7f2704"]
+	},Reds: {
+	3: ["#fee0d2","#fc9272","#de2d26"],
+	4: ["#fee5d9","#fcae91","#fb6a4a","#cb181d"],
+	5: ["#fee5d9","#fcae91","#fb6a4a","#de2d26","#a50f15"],
+	6: ["#fee5d9","#fcbba1","#fc9272","#fb6a4a","#de2d26","#a50f15"],
+	7: ["#fee5d9","#fcbba1","#fc9272","#fb6a4a","#ef3b2c","#cb181d","#99000d"],
+	8: ["#fff5f0","#fee0d2","#fcbba1","#fc9272","#fb6a4a","#ef3b2c","#cb181d","#99000d"],
+	9: ["#fff5f0","#fee0d2","#fcbba1","#fc9272","#fb6a4a","#ef3b2c","#cb181d","#a50f15","#67000d"]
+	},Greys: {
+	3: ["#f0f0f0","#bdbdbd","#636363"],
+	4: ["#f7f7f7","#cccccc","#969696","#525252"],
+	5: ["#f7f7f7","#cccccc","#969696","#636363","#252525"],
+	6: ["#f7f7f7","#d9d9d9","#bdbdbd","#969696","#636363","#252525"],
+	7: ["#f7f7f7","#d9d9d9","#bdbdbd","#969696","#737373","#525252","#252525"],
+	8: ["#ffffff","#f0f0f0","#d9d9d9","#bdbdbd","#969696","#737373","#525252","#252525"],
+	9: ["#ffffff","#f0f0f0","#d9d9d9","#bdbdbd","#969696","#737373","#525252","#252525","#000000"]
+	},PuOr: {
+	3: ["#f1a340","#f7f7f7","#998ec3"],
+	4: ["#e66101","#fdb863","#b2abd2","#5e3c99"],
+	5: ["#e66101","#fdb863","#f7f7f7","#b2abd2","#5e3c99"],
+	6: ["#b35806","#f1a340","#fee0b6","#d8daeb","#998ec3","#542788"],
+	7: ["#b35806","#f1a340","#fee0b6","#f7f7f7","#d8daeb","#998ec3","#542788"],
+	8: ["#b35806","#e08214","#fdb863","#fee0b6","#d8daeb","#b2abd2","#8073ac","#542788"],
+	9: ["#b35806","#e08214","#fdb863","#fee0b6","#f7f7f7","#d8daeb","#b2abd2","#8073ac","#542788"],
+	10: ["#7f3b08","#b35806","#e08214","#fdb863","#fee0b6","#d8daeb","#b2abd2","#8073ac","#542788","#2d004b"],
+	11: ["#7f3b08","#b35806","#e08214","#fdb863","#fee0b6","#f7f7f7","#d8daeb","#b2abd2","#8073ac","#542788","#2d004b"]
+	},BrBG: {
+	3: ["#d8b365","#f5f5f5","#5ab4ac"],
+	4: ["#a6611a","#dfc27d","#80cdc1","#018571"],
+	5: ["#a6611a","#dfc27d","#f5f5f5","#80cdc1","#018571"],
+	6: ["#8c510a","#d8b365","#f6e8c3","#c7eae5","#5ab4ac","#01665e"],
+	7: ["#8c510a","#d8b365","#f6e8c3","#f5f5f5","#c7eae5","#5ab4ac","#01665e"],
+	8: ["#8c510a","#bf812d","#dfc27d","#f6e8c3","#c7eae5","#80cdc1","#35978f","#01665e"],
+	9: ["#8c510a","#bf812d","#dfc27d","#f6e8c3","#f5f5f5","#c7eae5","#80cdc1","#35978f","#01665e"],
+	10: ["#543005","#8c510a","#bf812d","#dfc27d","#f6e8c3","#c7eae5","#80cdc1","#35978f","#01665e","#003c30"],
+	11: ["#543005","#8c510a","#bf812d","#dfc27d","#f6e8c3","#f5f5f5","#c7eae5","#80cdc1","#35978f","#01665e","#003c30"]
+	},PRGn: {
+	3: ["#af8dc3","#f7f7f7","#7fbf7b"],
+	4: ["#7b3294","#c2a5cf","#a6dba0","#008837"],
+	5: ["#7b3294","#c2a5cf","#f7f7f7","#a6dba0","#008837"],
+	6: ["#762a83","#af8dc3","#e7d4e8","#d9f0d3","#7fbf7b","#1b7837"],
+	7: ["#762a83","#af8dc3","#e7d4e8","#f7f7f7","#d9f0d3","#7fbf7b","#1b7837"],
+	8: ["#762a83","#9970ab","#c2a5cf","#e7d4e8","#d9f0d3","#a6dba0","#5aae61","#1b7837"],
+	9: ["#762a83","#9970ab","#c2a5cf","#e7d4e8","#f7f7f7","#d9f0d3","#a6dba0","#5aae61","#1b7837"],
+	10: ["#40004b","#762a83","#9970ab","#c2a5cf","#e7d4e8","#d9f0d3","#a6dba0","#5aae61","#1b7837","#00441b"],
+	11: ["#40004b","#762a83","#9970ab","#c2a5cf","#e7d4e8","#f7f7f7","#d9f0d3","#a6dba0","#5aae61","#1b7837","#00441b"]
+	},PiYG: {
+	3: ["#e9a3c9","#f7f7f7","#a1d76a"],
+	4: ["#d01c8b","#f1b6da","#b8e186","#4dac26"],
+	5: ["#d01c8b","#f1b6da","#f7f7f7","#b8e186","#4dac26"],
+	6: ["#c51b7d","#e9a3c9","#fde0ef","#e6f5d0","#a1d76a","#4d9221"],
+	7: ["#c51b7d","#e9a3c9","#fde0ef","#f7f7f7","#e6f5d0","#a1d76a","#4d9221"],
+	8: ["#c51b7d","#de77ae","#f1b6da","#fde0ef","#e6f5d0","#b8e186","#7fbc41","#4d9221"],
+	9: ["#c51b7d","#de77ae","#f1b6da","#fde0ef","#f7f7f7","#e6f5d0","#b8e186","#7fbc41","#4d9221"],
+	10: ["#8e0152","#c51b7d","#de77ae","#f1b6da","#fde0ef","#e6f5d0","#b8e186","#7fbc41","#4d9221","#276419"],
+	11: ["#8e0152","#c51b7d","#de77ae","#f1b6da","#fde0ef","#f7f7f7","#e6f5d0","#b8e186","#7fbc41","#4d9221","#276419"]
+	},RdBu: {
+	3: ["#ef8a62","#f7f7f7","#67a9cf"],
+	4: ["#ca0020","#f4a582","#92c5de","#0571b0"],
+	5: ["#ca0020","#f4a582","#f7f7f7","#92c5de","#0571b0"],
+	6: ["#b2182b","#ef8a62","#fddbc7","#d1e5f0","#67a9cf","#2166ac"],
+	7: ["#b2182b","#ef8a62","#fddbc7","#f7f7f7","#d1e5f0","#67a9cf","#2166ac"],
+	8: ["#b2182b","#d6604d","#f4a582","#fddbc7","#d1e5f0","#92c5de","#4393c3","#2166ac"],
+	9: ["#b2182b","#d6604d","#f4a582","#fddbc7","#f7f7f7","#d1e5f0","#92c5de","#4393c3","#2166ac"],
+	10: ["#67001f","#b2182b","#d6604d","#f4a582","#fddbc7","#d1e5f0","#92c5de","#4393c3","#2166ac","#053061"],
+	11: ["#67001f","#b2182b","#d6604d","#f4a582","#fddbc7","#f7f7f7","#d1e5f0","#92c5de","#4393c3","#2166ac","#053061"]
+	},RdGy: {
+	3: ["#ef8a62","#ffffff","#999999"],
+	4: ["#ca0020","#f4a582","#bababa","#404040"],
+	5: ["#ca0020","#f4a582","#ffffff","#bababa","#404040"],
+	6: ["#b2182b","#ef8a62","#fddbc7","#e0e0e0","#999999","#4d4d4d"],
+	7: ["#b2182b","#ef8a62","#fddbc7","#ffffff","#e0e0e0","#999999","#4d4d4d"],
+	8: ["#b2182b","#d6604d","#f4a582","#fddbc7","#e0e0e0","#bababa","#878787","#4d4d4d"],
+	9: ["#b2182b","#d6604d","#f4a582","#fddbc7","#ffffff","#e0e0e0","#bababa","#878787","#4d4d4d"],
+	10: ["#67001f","#b2182b","#d6604d","#f4a582","#fddbc7","#e0e0e0","#bababa","#878787","#4d4d4d","#1a1a1a"],
+	11: ["#67001f","#b2182b","#d6604d","#f4a582","#fddbc7","#ffffff","#e0e0e0","#bababa","#878787","#4d4d4d","#1a1a1a"]
+	},RdYlBu: {
+	3: ["#fc8d59","#ffffbf","#91bfdb"],
+	4: ["#d7191c","#fdae61","#abd9e9","#2c7bb6"],
+	5: ["#d7191c","#fdae61","#ffffbf","#abd9e9","#2c7bb6"],
+	6: ["#d73027","#fc8d59","#fee090","#e0f3f8","#91bfdb","#4575b4"],
+	7: ["#d73027","#fc8d59","#fee090","#ffffbf","#e0f3f8","#91bfdb","#4575b4"],
+	8: ["#d73027","#f46d43","#fdae61","#fee090","#e0f3f8","#abd9e9","#74add1","#4575b4"],
+	9: ["#d73027","#f46d43","#fdae61","#fee090","#ffffbf","#e0f3f8","#abd9e9","#74add1","#4575b4"],
+	10: ["#a50026","#d73027","#f46d43","#fdae61","#fee090","#e0f3f8","#abd9e9","#74add1","#4575b4","#313695"],
+	11: ["#a50026","#d73027","#f46d43","#fdae61","#fee090","#ffffbf","#e0f3f8","#abd9e9","#74add1","#4575b4","#313695"]
+	},Spectral: {
+	3: ["#fc8d59","#ffffbf","#99d594"],
+	4: ["#d7191c","#fdae61","#abdda4","#2b83ba"],
+	5: ["#d7191c","#fdae61","#ffffbf","#abdda4","#2b83ba"],
+	6: ["#d53e4f","#fc8d59","#fee08b","#e6f598","#99d594","#3288bd"],
+	7: ["#d53e4f","#fc8d59","#fee08b","#ffffbf","#e6f598","#99d594","#3288bd"],
+	8: ["#d53e4f","#f46d43","#fdae61","#fee08b","#e6f598","#abdda4","#66c2a5","#3288bd"],
+	9: ["#d53e4f","#f46d43","#fdae61","#fee08b","#ffffbf","#e6f598","#abdda4","#66c2a5","#3288bd"],
+	10: ["#9e0142","#d53e4f","#f46d43","#fdae61","#fee08b","#e6f598","#abdda4","#66c2a5","#3288bd","#5e4fa2"],
+	11: ["#9e0142","#d53e4f","#f46d43","#fdae61","#fee08b","#ffffbf","#e6f598","#abdda4","#66c2a5","#3288bd","#5e4fa2"]
+	},RdYlGn: {
+	3: ["#fc8d59","#ffffbf","#91cf60"],
+	4: ["#d7191c","#fdae61","#a6d96a","#1a9641"],
+	5: ["#d7191c","#fdae61","#ffffbf","#a6d96a","#1a9641"],
+	6: ["#d73027","#fc8d59","#fee08b","#d9ef8b","#91cf60","#1a9850"],
+	7: ["#d73027","#fc8d59","#fee08b","#ffffbf","#d9ef8b","#91cf60","#1a9850"],
+	8: ["#d73027","#f46d43","#fdae61","#fee08b","#d9ef8b","#a6d96a","#66bd63","#1a9850"],
+	9: ["#d73027","#f46d43","#fdae61","#fee08b","#ffffbf","#d9ef8b","#a6d96a","#66bd63","#1a9850"],
+	10: ["#a50026","#d73027","#f46d43","#fdae61","#fee08b","#d9ef8b","#a6d96a","#66bd63","#1a9850","#006837"],
+	11: ["#a50026","#d73027","#f46d43","#fdae61","#fee08b","#ffffbf","#d9ef8b","#a6d96a","#66bd63","#1a9850","#006837"]
+	},Accent: {
+	3: ["#7fc97f","#beaed4","#fdc086"],
+	4: ["#7fc97f","#beaed4","#fdc086","#ffff99"],
+	5: ["#7fc97f","#beaed4","#fdc086","#ffff99","#386cb0"],
+	6: ["#7fc97f","#beaed4","#fdc086","#ffff99","#386cb0","#f0027f"],
+	7: ["#7fc97f","#beaed4","#fdc086","#ffff99","#386cb0","#f0027f","#bf5b17"],
+	8: ["#7fc97f","#beaed4","#fdc086","#ffff99","#386cb0","#f0027f","#bf5b17","#666666"]
+	},Dark2: {
+	3: ["#1b9e77","#d95f02","#7570b3"],
+	4: ["#1b9e77","#d95f02","#7570b3","#e7298a"],
+	5: ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e"],
+	6: ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02"],
+	7: ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#a6761d"],
+	8: ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#a6761d","#666666"]
+	},Paired: {
+	3: ["#a6cee3","#1f78b4","#b2df8a"],
+	4: ["#a6cee3","#1f78b4","#b2df8a","#33a02c"],
+	5: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99"],
+	6: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c"],
+	7: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f"],
+	8: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00"],
+	9: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6"],
+	10: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6","#6a3d9a"],
+	11: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6","#6a3d9a","#ffff99"],
+	12: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6","#6a3d9a","#ffff99","#b15928"]
+	},Pastel1: {
+	3: ["#fbb4ae","#b3cde3","#ccebc5"],
+	4: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4"],
+	5: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6"],
+	6: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc"],
+	7: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc","#e5d8bd"],
+	8: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc","#e5d8bd","#fddaec"],
+	9: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc","#e5d8bd","#fddaec","#f2f2f2"]
+	},Pastel2: {
+	3: ["#b3e2cd","#fdcdac","#cbd5e8"],
+	4: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4"],
+	5: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9"],
+	6: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9","#fff2ae"],
+	7: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9","#fff2ae","#f1e2cc"],
+	8: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9","#fff2ae","#f1e2cc","#cccccc"]
+	},Set1: {
+	3: ["#e41a1c","#377eb8","#4daf4a"],
+	4: ["#e41a1c","#377eb8","#4daf4a","#984ea3"],
+	5: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00"],
+	6: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33"],
+	7: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33","#a65628"],
+	8: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33","#a65628","#f781bf"],
+	9: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33","#a65628","#f781bf","#999999"]
+	},Set2: {
+	3: ["#66c2a5","#fc8d62","#8da0cb"],
+	4: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3"],
+	5: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854"],
+	6: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f"],
+	7: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f","#e5c494"],
+	8: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f","#e5c494","#b3b3b3"]
+	},Set3: {
+	3: ["#8dd3c7","#ffffb3","#bebada"],
+	4: ["#8dd3c7","#ffffb3","#bebada","#fb8072"],
+	5: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3"],
+	6: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462"],
+	7: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69"],
+	8: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5"],
+	9: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9"],
+	10: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd"],
+	11: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd","#ccebc5"],
+	12: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd","#ccebc5","#ffed6f"]
+	}};
+	
+	if (true) {
+	    !(__WEBPACK_AMD_DEFINE_FACTORY__ = (colorbrewer), __WEBPACK_AMD_DEFINE_RESULT__ = (typeof __WEBPACK_AMD_DEFINE_FACTORY__ === 'function' ? (__WEBPACK_AMD_DEFINE_FACTORY__.call(exports, __webpack_require__, exports, module)) : __WEBPACK_AMD_DEFINE_FACTORY__), __WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+	} else if (typeof module === "object" && module.exports) {
+	    module.exports = colorbrewer;
+	} else {
+	    this.colorbrewer = colorbrewer;
+	}
+	
+	}();
+
+
+/***/ },
+/* 13 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+	
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.makeColorScale = undefined;
+	
+	var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol ? "symbol" : typeof obj; };
+	
+	var _d3Interpolate = __webpack_require__(14);
+	
+	var _d3Scale = __webpack_require__(16);
+	
+	var _d3Color = __webpack_require__(15);
+	
+	var LinearGradient = function LinearGradient(range, options) {
+	  if ((typeof range === 'undefined' ? 'undefined' : _typeof(range)) == 'object' && range.hasOwnProperty('colorRange')) {
+	    for (var prop in range) {
+	      if (range.hasOwnProperty(prop)) {
+	        this[prop] = range[prop];
+	      }
+	    }
+	  } else {
+	    this.colorRange = range;
+	  }
+	  // patse options from obkect in array
+	  var last = range[range.length - 1];
+	  if (range.length > 1 && (typeof last === 'undefined' ? 'undefined' : _typeof(last)) == 'object' && !Array.isArray(last)) {
+	    for (var prop in last) {
+	      if (last.hasOwnProperty(prop)) {
+	        if (this[prop] !== undefined) console.info('overiding options', this[prop], last[prop]);
+	        this[prop] = last[prop];
+	      }
+	    }
+	  }
+	
+	  for (var prop in options) {
+	    if (options.hasOwnProperty(prop)) {
+	      if (this[prop] !== undefined) console.info('overiding options', this[prop], options[prop]);
+	      this[prop] = options[prop];
+	    }
+	  }
+	  this.colorRange = parseRange(this.colorRange, this);
+	};
+	LinearGradient.prototype.style = 'continuous';
+	
+	function fillColorScale(range, steps) {
+	  if (range.length >= 2) {
+	    var colors = [];
+	    var stops = [];
+	    var l = range.length;
+	    var s = steps - 1;
+	    for (var i = 0; i < l; i++) {
+	      stops.push(s * i / (l - 1));
+	    }
+	    var colorScale = (0, _d3Scale.scaleLinear)().domain(stops).range(range).interpolate(_d3Interpolate.interpolateLab);
+	    for (var _i = 0; _i < steps; ++_i) {
+	      colors.push((0, _d3Color.rgb)(colorScale(_i)));
+	    }
+	    return colors;
+	  } else {
+	    return false;
+	  }
+	}
+	
+	function collectStrings(arr) {
+	  var arrOfArr = [];
+	  var current = [];
+	  arr.forEach(function (r) {
+	    if (Array.isArray(r)) {
+	      if (current.length > 0) arrOfArr.push(current);
+	      current = [];
+	      arrOfArr.push(r);
+	    } else if (typeof r === 'string') {
+	      current.push(r);
+	    }
+	  });
+	  if (current.length > 0) arrOfArr.push(current);
+	  return arrOfArr;
+	}
+	
+	function collectDeclaredWidths(arr) {
+	  var width = 0;
+	  var count = 0;
+	  arr.forEach(function (r) {
+	    if (Array.isArray(r[0]) && typeof r[1] === 'number' && r[1] > 0 && r[1] <= 1) {
+	      width += r[1];
+	      count += 1;
+	    }
+	  });
+	  return {
+	    width: width,
+	    count: count
+	  };
+	}
+	
+	function distributeUndeclaredWidths(arr, reserved) {
+	  var l = arr.length - reserved.count;
+	  var remainder = 1 - reserved.width;
+	  var lastRemainder, lastUndeclared;
+	  var width = remainder / l;
+	
+	  arr.forEach(function (r, i) {
+	    if (!(Array.isArray(r[0]) && typeof r[1] === 'number' && r[1] > 0 && r[1] <= 1)) {
+	      lastRemainder = remainder;
+	      lastUndeclared = arr[i];
+	      remainder -= width;
+	      arr[i] = [r, width];
+	    }
+	  });
+	  if (remainder !== 0) {
+	    lastUndeclared = lastRemainder;
+	  }
+	  return arr;
+	}
+	
+	function dropNarrowRanges(normalized) {
+	  var rInput = normalized.range.slice();
+	  var ranges = [];
+	  var dropped = [];
+	  var minimum = 1 / normalized.steps;
+	  rInput.forEach(function (r, i) {
+	    if (r[1] < minimum) {
+	      // redistribute
+	      if (i === 0) {
+	        rInput[i + 1][1] += r[1];
+	      } else if (i === rInput.length - 1) {
+	        ranges[ranges.length - 1][1] += r[1];
+	      } else {
+	        ranges[ranges.length - 1][1] += r[1] / 2;
+	        rInput[i + 1][1] += r[1] / 2;
+	      }
+	      dropped.push(r);
+	      //normalized.steps -= r[0].length;
+	    } else {
+	        ranges.push(r);
+	      }
+	  });
+	
+	  var iterate = 0;
+	  ranges.forEach(function (r) {
+	    if (r[1] < minimum) {
+	      iterate++;
+	    }
+	  });
+	
+	  if (dropped.length > 0) {
+	    console.log('iterate', iterate);
+	    console.log('dropped', dropped);
+	  }
+	
+	  normalized.range = ranges;
+	
+	  if (iterate > 0) {
+	    normalized = dropNarrowRanges(normalized);
+	  }
+	
+	  return normalized;
+	}
+	
+	function padOutSingleMemberArrays(range) {
+	  range.forEach(function (current, i) {
+	    if (Array.isArray(current) && current.length === 1 && typeof current[0] === 'string') {
+	      range[i].push(current[0]);
+	    }
+	  });
+	  return range;
+	}
+	
+	function flattenExplicit(r) {
+	  r.forEach(function (e, i) {
+	    r[i] = [e, e];
+	  });
+	  return r;
+	}
+	
+	function parseRange(range, options) {
+	  if (typeof range == 'string') range = [range];
+	  range = collectStrings(range);
+	  if (options.style === 'flat' && Array.isArray(range)) {
+	    range = flattenExplicit(range[0]);
+	  }
+	  range = padOutSingleMemberArrays(range);
+	  console.log(range);
+	  var reservedWidth = collectDeclaredWidths(range);
+	  return distributeUndeclaredWidths(range, reservedWidth);
+	}
+	
+	function collectNormalizedRanges(gradient, steps) {
+	  var sum = 0;
+	  var totalSteps = 0;
+	  var tmp;
+	  var threshold = 0.00001;
+	  var equalRanges = true;
+	  var range = gradient.colorRange;
+	  range.forEach(function (a) {
+	    sum += a[1];
+	    totalSteps += a[0].length;
+	    if (equalRanges && tmp !== undefined && Math.abs(a[1] - tmp) > threshold) {
+	      equalRanges = false;
+	    }
+	    tmp = a[1];
+	  });
+	  if (sum !== 1) {
+	    console.warn('sum of range widths does not equal 1', sum, range);
+	  }
+	
+	  if (totalSteps > steps && equalRanges) {
+	    console.warn(steps, 'too few steps requested, increasing to', totalSteps);
+	    steps = totalSteps;
+	  }
+	  var normalized = {
+	    range: range,
+	    steps: steps
+	  };
+	  gradient.steps = steps;
+	  gradient.normalized = dropNarrowRanges(normalized);
+	  return gradient;
+	}
+	
+	function makeColorScale(range, steps, options) {
+	  var gradient = new LinearGradient(range, options);
+	  gradient = collectNormalizedRanges(gradient, steps);
+	  console.log(gradient);
+	  steps = gradient.normalized.steps;
+	  range = gradient.normalized.range;
+	  var fullSteps;
+	  var stepsAvailable = steps;
+	  var usedSteps = 0;
+	  var availableRange = 1;
+	  var colors = [];
+	  range.forEach(function (scale) {
+	    fullSteps = Math.round(stepsAvailable * scale[1] / availableRange);
+	    availableRange -= scale[1];
+	    if (fullSteps > 1 && stepsAvailable >= 2) {
+	      stepsAvailable -= fullSteps;
+	      usedSteps += fullSteps;
+	      colors = colors.concat(fillColorScale(scale[0], fullSteps));
+	    } else {
+	      console.info('dropped range', scale);
+	    }
+	  });
+	  if (usedSteps !== steps) {
+	    console.error('calculated color steps dont match up', usedSteps, steps, range, colors);
+	  }
+	  return colors;
+	}
+	
+	exports.makeColorScale = makeColorScale;
+
+/***/ },
+/* 14 */
+/***/ function(module, exports, __webpack_require__) {
+
 	(function (global, factory) {
-	   true ? factory(exports, __webpack_require__(12)) :
+	   true ? factory(exports, __webpack_require__(15)) :
 	  typeof define === 'function' && define.amd ? define(['exports', 'd3-color'], factory) :
 	  (factory((global.d3_interpolate = global.d3_interpolate || {}),global.d3_color));
 	}(this, function (exports,d3Color) { 'use strict';
@@ -2420,7 +2807,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
-/* 12 */
+/* 15 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
@@ -2942,11 +3329,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
-/* 13 */
+/* 16 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
-	   true ? factory(exports, __webpack_require__(10), __webpack_require__(14), __webpack_require__(15), __webpack_require__(17), __webpack_require__(18), __webpack_require__(19), __webpack_require__(16)) :
+	   true ? factory(exports, __webpack_require__(10), __webpack_require__(17), __webpack_require__(14), __webpack_require__(18), __webpack_require__(19), __webpack_require__(20), __webpack_require__(15)) :
 	  typeof define === 'function' && define.amd ? define(['exports', 'd3-array', 'd3-collection', 'd3-interpolate', 'd3-format', 'd3-time', 'd3-time-format', 'd3-color'], factory) :
 	  (factory((global.d3_scale = global.d3_scale || {}),global.d3_array,global.d3_collection,global.d3_interpolate,global.d3_format,global.d3_time,global.d3_time_format,global.d3_color));
 	}(this, function (exports,d3Array,d3Collection,d3Interpolate,d3Format,d3Time,d3TimeFormat,d3Color) { 'use strict';
@@ -3876,7 +4263,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
-/* 14 */
+/* 17 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
@@ -4105,1044 +4492,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
-/* 15 */
-/***/ function(module, exports, __webpack_require__) {
-
-	(function (global, factory) {
-	   true ? factory(exports, __webpack_require__(16)) :
-	  typeof define === 'function' && define.amd ? define(['exports', 'd3-color'], factory) :
-	  (factory((global.d3_interpolate = global.d3_interpolate || {}),global.d3_color));
-	}(this, function (exports,d3Color) { 'use strict';
-	
-	  function constant(x) {
-	    return function() {
-	      return x;
-	    };
-	  }
-	
-	  function linear(a, d) {
-	    return function(t) {
-	      return a + t * d;
-	    };
-	  }
-	
-	  function exponential(a, b, y) {
-	    return a = Math.pow(a, y), b = Math.pow(b, y) - a, y = 1 / y, function(t) {
-	      return Math.pow(a + t * b, y);
-	    };
-	  }
-	
-	  function interpolateHue(a, b) {
-	    var d = b - a;
-	    return d ? linear(a, d > 180 || d < -180 ? d - 360 * Math.round(d / 360) : d) : constant(isNaN(a) ? b : a);
-	  }
-	
-	  function gamma(y) {
-	    return (y = +y) === 1 ? nogamma : function(a, b) {
-	      return b - a ? exponential(a, b, y) : constant(isNaN(a) ? b : a);
-	    };
-	  }
-	
-	  function nogamma(a, b) {
-	    var d = b - a;
-	    return d ? linear(a, d) : constant(isNaN(a) ? b : a);
-	  }
-	
-	  var rgb$1 = (function gamma$$(y) {
-	    var interpolateColor = gamma(y);
-	
-	    function interpolateRgb(start, end) {
-	      var r = interpolateColor((start = d3Color.rgb(start)).r, (end = d3Color.rgb(end)).r),
-	          g = interpolateColor(start.g, end.g),
-	          b = interpolateColor(start.b, end.b),
-	          opacity = interpolateColor(start.opacity, end.opacity);
-	      return function(t) {
-	        start.r = r(t);
-	        start.g = g(t);
-	        start.b = b(t);
-	        start.opacity = opacity(t);
-	        return start + "";
-	      };
-	    }
-	
-	    interpolateRgb.gamma = gamma$$;
-	
-	    return interpolateRgb;
-	  })(1);
-	
-	  // TODO sparse arrays?
-	  function array(a, b) {
-	    var x = [],
-	        c = [],
-	        na = a ? a.length : 0,
-	        nb = b ? b.length : 0,
-	        n0 = Math.min(na, nb),
-	        i;
-	
-	    for (i = 0; i < n0; ++i) x.push(value(a[i], b[i]));
-	    for (; i < na; ++i) c[i] = a[i];
-	    for (; i < nb; ++i) c[i] = b[i];
-	
-	    return function(t) {
-	      for (i = 0; i < n0; ++i) c[i] = x[i](t);
-	      return c;
-	    };
-	  }
-	
-	  function number(a, b) {
-	    return a = +a, b -= a, function(t) {
-	      return a + b * t;
-	    };
-	  }
-	
-	  function object(a, b) {
-	    var i = {},
-	        c = {},
-	        k;
-	
-	    if (a === null || typeof a !== "object") a = {};
-	    if (b === null || typeof b !== "object") b = {};
-	
-	    for (k in a) {
-	      if (k in b) {
-	        i[k] = value(a[k], b[k]);
-	      } else {
-	        c[k] = a[k];
-	      }
-	    }
-	
-	    for (k in b) {
-	      if (!(k in a)) {
-	        c[k] = b[k];
-	      }
-	    }
-	
-	    return function(t) {
-	      for (k in i) c[k] = i[k](t);
-	      return c;
-	    };
-	  }
-	
-	  var reA = /[-+]?(?:\d+\.?\d*|\.?\d+)(?:[eE][-+]?\d+)?/g;
-	  var reB = new RegExp(reA.source, "g");
-	  function zero(b) {
-	    return function() {
-	      return b;
-	    };
-	  }
-	
-	  function one(b) {
-	    return function(t) {
-	      return b(t) + "";
-	    };
-	  }
-	
-	  function string(a, b) {
-	    var bi = reA.lastIndex = reB.lastIndex = 0, // scan index for next number in b
-	        am, // current match in a
-	        bm, // current match in b
-	        bs, // string preceding current number in b, if any
-	        i = -1, // index in s
-	        s = [], // string constants and placeholders
-	        q = []; // number interpolators
-	
-	    // Coerce inputs to strings.
-	    a = a + "", b = b + "";
-	
-	    // Interpolate pairs of numbers in a & b.
-	    while ((am = reA.exec(a))
-	        && (bm = reB.exec(b))) {
-	      if ((bs = bm.index) > bi) { // a string precedes the next number in b
-	        bs = b.slice(bi, bs);
-	        if (s[i]) s[i] += bs; // coalesce with previous string
-	        else s[++i] = bs;
-	      }
-	      if ((am = am[0]) === (bm = bm[0])) { // numbers in a & b match
-	        if (s[i]) s[i] += bm; // coalesce with previous string
-	        else s[++i] = bm;
-	      } else { // interpolate non-matching numbers
-	        s[++i] = null;
-	        q.push({i: i, x: number(am, bm)});
-	      }
-	      bi = reB.lastIndex;
-	    }
-	
-	    // Add remains of b.
-	    if (bi < b.length) {
-	      bs = b.slice(bi);
-	      if (s[i]) s[i] += bs; // coalesce with previous string
-	      else s[++i] = bs;
-	    }
-	
-	    // Special optimization for only a single match.
-	    // Otherwise, interpolate each of the numbers and rejoin the string.
-	    return s.length < 2 ? (q[0]
-	        ? one(q[0].x)
-	        : zero(b))
-	        : (b = q.length, function(t) {
-	            for (var i = 0, o; i < b; ++i) s[(o = q[i]).i] = o.x(t);
-	            return s.join("");
-	          });
-	  }
-	
-	  function value(a, b) {
-	    var t = typeof b, c;
-	    return b == null || t === "boolean" ? constant(b)
-	        : (t === "number" ? number
-	        : t === "string" ? ((c = d3Color.color(b)) ? (b = c, rgb$1) : string)
-	        : b instanceof d3Color.color ? rgb$1
-	        : Array.isArray(b) ? array
-	        : object)(a, b);
-	  }
-	
-	  function round(a, b) {
-	    return a = +a, b -= a, function(t) {
-	      return Math.round(a + b * t);
-	    };
-	  }
-	
-	  var rad2deg = 180 / Math.PI;
-	
-	  var identity = {
-	    translateX: 0,
-	    translateY: 0,
-	    rotate: 0,
-	    skewX: 0,
-	    scaleX: 1,
-	    scaleY: 1
-	  };
-	
-	  function decompose(a, b, c, d, e, f) {
-	    if (a * d === b * c) return null;
-	
-	    var scaleX = Math.sqrt(a * a + b * b);
-	    a /= scaleX, b /= scaleX;
-	
-	    var skewX = a * c + b * d;
-	    c -= a * skewX, d -= b * skewX;
-	
-	    var scaleY = Math.sqrt(c * c + d * d);
-	    c /= scaleY, d /= scaleY, skewX /= scaleY;
-	
-	    if (a * d < b * c) a = -a, b = -b, skewX = -skewX, scaleX = -scaleX;
-	
-	    return {
-	      translateX: e,
-	      translateY: f,
-	      rotate: Math.atan2(b, a) * rad2deg,
-	      skewX: Math.atan(skewX) * rad2deg,
-	      scaleX: scaleX,
-	      scaleY: scaleY
-	    };
-	  }
-	
-	  var cssNode;
-	  var cssRoot;
-	  var cssView;
-	  var svgNode;
-	  function parseCss(value) {
-	    if (value === "none") return identity;
-	    if (!cssNode) cssNode = document.createElement("DIV"), cssRoot = document.documentElement, cssView = document.defaultView;
-	    cssNode.style.transform = value;
-	    value = cssView.getComputedStyle(cssRoot.appendChild(cssNode), null).getPropertyValue("transform");
-	    cssRoot.removeChild(cssNode);
-	    var m = value.slice(7, -1).split(",");
-	    return decompose(+m[0], +m[1], +m[2], +m[3], +m[4], +m[5]);
-	  }
-	
-	  function parseSvg(value) {
-	    if (!svgNode) svgNode = document.createElementNS("http://www.w3.org/2000/svg", "g");
-	    svgNode.setAttribute("transform", value == null ? "" : value);
-	    var m = svgNode.transform.baseVal.consolidate().matrix;
-	    return decompose(m.a, m.b, m.c, m.d, m.e, m.f);
-	  }
-	
-	  function interpolateTransform(parse, pxComma, pxParen, degParen) {
-	
-	    function pop(s) {
-	      return s.length ? s.pop() + " " : "";
-	    }
-	
-	    function translate(xa, ya, xb, yb, s, q) {
-	      if (xa !== xb || ya !== yb) {
-	        var i = s.push("translate(", null, pxComma, null, pxParen);
-	        q.push({i: i - 4, x: number(xa, xb)}, {i: i - 2, x: number(ya, yb)});
-	      } else if (xb || yb) {
-	        s.push("translate(" + xb + pxComma + yb + pxParen);
-	      }
-	    }
-	
-	    function rotate(a, b, s, q) {
-	      if (a !== b) {
-	        if (a - b > 180) b += 360; else if (b - a > 180) a += 360; // shortest path
-	        q.push({i: s.push(pop(s) + "rotate(", null, degParen) - 2, x: number(a, b)});
-	      } else if (b) {
-	        s.push(pop(s) + "rotate(" + b + degParen);
-	      }
-	    }
-	
-	    function skewX(a, b, s, q) {
-	      if (a !== b) {
-	        q.push({i: s.push(pop(s) + "skewX(", null, degParen) - 2, x: number(a, b)});
-	      } else if (b) {
-	        s.push(pop(s) + "skewX(" + b + degParen);
-	      }
-	    }
-	
-	    function scale(xa, ya, xb, yb, s, q) {
-	      if (xa !== xb || ya !== yb) {
-	        var i = s.push(pop(s) + "scale(", null, ",", null, ")");
-	        q.push({i: i - 4, x: number(xa, xb)}, {i: i - 2, x: number(ya, yb)});
-	      } else if (xb !== 1 || yb !== 1) {
-	        s.push(pop(s) + "scale(" + xb + "," + yb + ")");
-	      }
-	    }
-	
-	    return function(a, b) {
-	      var s = [], // string constants and placeholders
-	          q = []; // number interpolators
-	      a = parse(a), b = parse(b);
-	      translate(a.translateX, a.translateY, b.translateX, b.translateY, s, q);
-	      rotate(a.rotate, b.rotate, s, q);
-	      skewX(a.skewX, b.skewX, s, q);
-	      scale(a.scaleX, a.scaleY, b.scaleX, b.scaleY, s, q);
-	      a = b = null; // gc
-	      return function(t) {
-	        var i = -1, n = q.length, o;
-	        while (++i < n) s[(o = q[i]).i] = o.x(t);
-	        return s.join("");
-	      };
-	    };
-	  }
-	
-	  var interpolateTransformCss = interpolateTransform(parseCss, "px, ", "px)", "deg)");
-	  var interpolateTransformSvg = interpolateTransform(parseSvg, ", ", ")", ")");
-	
-	  var rho = Math.SQRT2;
-	  var rho2 = 2;
-	  var rho4 = 4;
-	  var epsilon2 = 1e-12;
-	  function cosh(x) {
-	    return ((x = Math.exp(x)) + 1 / x) / 2;
-	  }
-	
-	  function sinh(x) {
-	    return ((x = Math.exp(x)) - 1 / x) / 2;
-	  }
-	
-	  function tanh(x) {
-	    return ((x = Math.exp(2 * x)) - 1) / (x + 1);
-	  }
-	
-	  // p0 = [ux0, uy0, w0]
-	  // p1 = [ux1, uy1, w1]
-	  function zoom(p0, p1) {
-	    var ux0 = p0[0], uy0 = p0[1], w0 = p0[2],
-	        ux1 = p1[0], uy1 = p1[1], w1 = p1[2],
-	        dx = ux1 - ux0,
-	        dy = uy1 - uy0,
-	        d2 = dx * dx + dy * dy,
-	        i,
-	        S;
-	
-	    // Special case for u0 ≅ u1.
-	    if (d2 < epsilon2) {
-	      S = Math.log(w1 / w0) / rho;
-	      i = function(t) {
-	        return [
-	          ux0 + t * dx,
-	          uy0 + t * dy,
-	          w0 * Math.exp(rho * t * S)
-	        ];
-	      }
-	    }
-	
-	    // General case.
-	    else {
-	      var d1 = Math.sqrt(d2),
-	          b0 = (w1 * w1 - w0 * w0 + rho4 * d2) / (2 * w0 * rho2 * d1),
-	          b1 = (w1 * w1 - w0 * w0 - rho4 * d2) / (2 * w1 * rho2 * d1),
-	          r0 = Math.log(Math.sqrt(b0 * b0 + 1) - b0),
-	          r1 = Math.log(Math.sqrt(b1 * b1 + 1) - b1);
-	      S = (r1 - r0) / rho;
-	      i = function(t) {
-	        var s = t * S,
-	            coshr0 = cosh(r0),
-	            u = w0 / (rho2 * d1) * (coshr0 * tanh(rho * s + r0) - sinh(r0));
-	        return [
-	          ux0 + u * dx,
-	          uy0 + u * dy,
-	          w0 * coshr0 / cosh(rho * s + r0)
-	        ];
-	      }
-	    }
-	
-	    i.duration = S * 1000;
-	
-	    return i;
-	  }
-	
-	  function interpolateHsl(start, end) {
-	    var h = interpolateHue((start = d3Color.hsl(start)).h, (end = d3Color.hsl(end)).h),
-	        s = nogamma(start.s, end.s),
-	        l = nogamma(start.l, end.l),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.h = h(t);
-	      start.s = s(t);
-	      start.l = l(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  function interpolateHslLong(start, end) {
-	    var h = nogamma((start = d3Color.hsl(start)).h, (end = d3Color.hsl(end)).h),
-	        s = nogamma(start.s, end.s),
-	        l = nogamma(start.l, end.l),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.h = h(t);
-	      start.s = s(t);
-	      start.l = l(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  function interpolateLab(start, end) {
-	    var l = nogamma((start = d3Color.lab(start)).l, (end = d3Color.lab(end)).l),
-	        a = nogamma(start.a, end.a),
-	        b = nogamma(start.b, end.b),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.l = l(t);
-	      start.a = a(t);
-	      start.b = b(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  function interpolateHcl(start, end) {
-	    var h = interpolateHue((start = d3Color.hcl(start)).h, (end = d3Color.hcl(end)).h),
-	        c = nogamma(start.c, end.c),
-	        l = nogamma(start.l, end.l),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.h = h(t);
-	      start.c = c(t);
-	      start.l = l(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  function interpolateHclLong(start, end) {
-	    var h = nogamma((start = d3Color.hcl(start)).h, (end = d3Color.hcl(end)).h),
-	        c = nogamma(start.c, end.c),
-	        l = nogamma(start.l, end.l),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.h = h(t);
-	      start.c = c(t);
-	      start.l = l(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  var cubehelix$1 = (function gamma(y) {
-	    y = +y;
-	
-	    function interpolateCubehelix(start, end) {
-	      var h = interpolateHue((start = d3Color.cubehelix(start)).h, (end = d3Color.cubehelix(end)).h),
-	          s = nogamma(start.s, end.s),
-	          l = nogamma(start.l, end.l),
-	          opacity = nogamma(start.opacity, end.opacity);
-	      return function(t) {
-	        start.h = h(t);
-	        start.s = s(t);
-	        start.l = l(Math.pow(t, y));
-	        start.opacity = opacity(t);
-	        return start + "";
-	      };
-	    }
-	
-	    interpolateCubehelix.gamma = gamma;
-	
-	    return interpolateCubehelix;
-	  })(1);
-	
-	  var cubehelixLong = (function gamma(y) {
-	    y = +y;
-	
-	    function interpolateCubehelixLong(start, end) {
-	      var h = nogamma((start = d3Color.cubehelix(start)).h, (end = d3Color.cubehelix(end)).h),
-	          s = nogamma(start.s, end.s),
-	          l = nogamma(start.l, end.l),
-	          opacity = nogamma(start.opacity, end.opacity);
-	      return function(t) {
-	        start.h = h(t);
-	        start.s = s(t);
-	        start.l = l(Math.pow(t, y));
-	        start.opacity = opacity(t);
-	        return start + "";
-	      };
-	    }
-	
-	    interpolateCubehelixLong.gamma = gamma;
-	
-	    return interpolateCubehelixLong;
-	  })(1);
-	
-	  var version = "0.7.0";
-	
-	  exports.version = version;
-	  exports.interpolate = value;
-	  exports.interpolateArray = array;
-	  exports.interpolateNumber = number;
-	  exports.interpolateObject = object;
-	  exports.interpolateRound = round;
-	  exports.interpolateString = string;
-	  exports.interpolateTransformCss = interpolateTransformCss;
-	  exports.interpolateTransformSvg = interpolateTransformSvg;
-	  exports.interpolateZoom = zoom;
-	  exports.interpolateRgb = rgb$1;
-	  exports.interpolateHsl = interpolateHsl;
-	  exports.interpolateHslLong = interpolateHslLong;
-	  exports.interpolateLab = interpolateLab;
-	  exports.interpolateHcl = interpolateHcl;
-	  exports.interpolateHclLong = interpolateHclLong;
-	  exports.interpolateCubehelix = cubehelix$1;
-	  exports.interpolateCubehelixLong = cubehelixLong;
-	
-	}));
-
-/***/ },
-/* 16 */
-/***/ function(module, exports, __webpack_require__) {
-
-	(function (global, factory) {
-	   true ? factory(exports) :
-	  typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	  (factory((global.d3_color = global.d3_color || {})));
-	}(this, function (exports) { 'use strict';
-	
-	  function define(constructor, factory, prototype) {
-	    constructor.prototype = factory.prototype = prototype;
-	    prototype.constructor = constructor;
-	  }
-	
-	  function extend(parent, definition) {
-	    var prototype = Object.create(parent.prototype);
-	    for (var key in definition) prototype[key] = definition[key];
-	    return prototype;
-	  }
-	
-	  function Color() {}
-	
-	  var darker = 0.7;
-	  var brighter = 1 / darker;
-	
-	  var reHex3 = /^#([0-9a-f]{3})$/;
-	  var reHex6 = /^#([0-9a-f]{6})$/;
-	  var reRgbInteger = /^rgb\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*\)$/;
-	  var reRgbPercent = /^rgb\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
-	  var reRgbaInteger = /^rgba\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var reRgbaPercent = /^rgba\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var reHslPercent = /^hsl\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
-	  var reHslaPercent = /^hsla\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var named = {
-	    aliceblue: 0xf0f8ff,
-	    antiquewhite: 0xfaebd7,
-	    aqua: 0x00ffff,
-	    aquamarine: 0x7fffd4,
-	    azure: 0xf0ffff,
-	    beige: 0xf5f5dc,
-	    bisque: 0xffe4c4,
-	    black: 0x000000,
-	    blanchedalmond: 0xffebcd,
-	    blue: 0x0000ff,
-	    blueviolet: 0x8a2be2,
-	    brown: 0xa52a2a,
-	    burlywood: 0xdeb887,
-	    cadetblue: 0x5f9ea0,
-	    chartreuse: 0x7fff00,
-	    chocolate: 0xd2691e,
-	    coral: 0xff7f50,
-	    cornflowerblue: 0x6495ed,
-	    cornsilk: 0xfff8dc,
-	    crimson: 0xdc143c,
-	    cyan: 0x00ffff,
-	    darkblue: 0x00008b,
-	    darkcyan: 0x008b8b,
-	    darkgoldenrod: 0xb8860b,
-	    darkgray: 0xa9a9a9,
-	    darkgreen: 0x006400,
-	    darkgrey: 0xa9a9a9,
-	    darkkhaki: 0xbdb76b,
-	    darkmagenta: 0x8b008b,
-	    darkolivegreen: 0x556b2f,
-	    darkorange: 0xff8c00,
-	    darkorchid: 0x9932cc,
-	    darkred: 0x8b0000,
-	    darksalmon: 0xe9967a,
-	    darkseagreen: 0x8fbc8f,
-	    darkslateblue: 0x483d8b,
-	    darkslategray: 0x2f4f4f,
-	    darkslategrey: 0x2f4f4f,
-	    darkturquoise: 0x00ced1,
-	    darkviolet: 0x9400d3,
-	    deeppink: 0xff1493,
-	    deepskyblue: 0x00bfff,
-	    dimgray: 0x696969,
-	    dimgrey: 0x696969,
-	    dodgerblue: 0x1e90ff,
-	    firebrick: 0xb22222,
-	    floralwhite: 0xfffaf0,
-	    forestgreen: 0x228b22,
-	    fuchsia: 0xff00ff,
-	    gainsboro: 0xdcdcdc,
-	    ghostwhite: 0xf8f8ff,
-	    gold: 0xffd700,
-	    goldenrod: 0xdaa520,
-	    gray: 0x808080,
-	    green: 0x008000,
-	    greenyellow: 0xadff2f,
-	    grey: 0x808080,
-	    honeydew: 0xf0fff0,
-	    hotpink: 0xff69b4,
-	    indianred: 0xcd5c5c,
-	    indigo: 0x4b0082,
-	    ivory: 0xfffff0,
-	    khaki: 0xf0e68c,
-	    lavender: 0xe6e6fa,
-	    lavenderblush: 0xfff0f5,
-	    lawngreen: 0x7cfc00,
-	    lemonchiffon: 0xfffacd,
-	    lightblue: 0xadd8e6,
-	    lightcoral: 0xf08080,
-	    lightcyan: 0xe0ffff,
-	    lightgoldenrodyellow: 0xfafad2,
-	    lightgray: 0xd3d3d3,
-	    lightgreen: 0x90ee90,
-	    lightgrey: 0xd3d3d3,
-	    lightpink: 0xffb6c1,
-	    lightsalmon: 0xffa07a,
-	    lightseagreen: 0x20b2aa,
-	    lightskyblue: 0x87cefa,
-	    lightslategray: 0x778899,
-	    lightslategrey: 0x778899,
-	    lightsteelblue: 0xb0c4de,
-	    lightyellow: 0xffffe0,
-	    lime: 0x00ff00,
-	    limegreen: 0x32cd32,
-	    linen: 0xfaf0e6,
-	    magenta: 0xff00ff,
-	    maroon: 0x800000,
-	    mediumaquamarine: 0x66cdaa,
-	    mediumblue: 0x0000cd,
-	    mediumorchid: 0xba55d3,
-	    mediumpurple: 0x9370db,
-	    mediumseagreen: 0x3cb371,
-	    mediumslateblue: 0x7b68ee,
-	    mediumspringgreen: 0x00fa9a,
-	    mediumturquoise: 0x48d1cc,
-	    mediumvioletred: 0xc71585,
-	    midnightblue: 0x191970,
-	    mintcream: 0xf5fffa,
-	    mistyrose: 0xffe4e1,
-	    moccasin: 0xffe4b5,
-	    navajowhite: 0xffdead,
-	    navy: 0x000080,
-	    oldlace: 0xfdf5e6,
-	    olive: 0x808000,
-	    olivedrab: 0x6b8e23,
-	    orange: 0xffa500,
-	    orangered: 0xff4500,
-	    orchid: 0xda70d6,
-	    palegoldenrod: 0xeee8aa,
-	    palegreen: 0x98fb98,
-	    paleturquoise: 0xafeeee,
-	    palevioletred: 0xdb7093,
-	    papayawhip: 0xffefd5,
-	    peachpuff: 0xffdab9,
-	    peru: 0xcd853f,
-	    pink: 0xffc0cb,
-	    plum: 0xdda0dd,
-	    powderblue: 0xb0e0e6,
-	    purple: 0x800080,
-	    rebeccapurple: 0x663399,
-	    red: 0xff0000,
-	    rosybrown: 0xbc8f8f,
-	    royalblue: 0x4169e1,
-	    saddlebrown: 0x8b4513,
-	    salmon: 0xfa8072,
-	    sandybrown: 0xf4a460,
-	    seagreen: 0x2e8b57,
-	    seashell: 0xfff5ee,
-	    sienna: 0xa0522d,
-	    silver: 0xc0c0c0,
-	    skyblue: 0x87ceeb,
-	    slateblue: 0x6a5acd,
-	    slategray: 0x708090,
-	    slategrey: 0x708090,
-	    snow: 0xfffafa,
-	    springgreen: 0x00ff7f,
-	    steelblue: 0x4682b4,
-	    tan: 0xd2b48c,
-	    teal: 0x008080,
-	    thistle: 0xd8bfd8,
-	    tomato: 0xff6347,
-	    turquoise: 0x40e0d0,
-	    violet: 0xee82ee,
-	    wheat: 0xf5deb3,
-	    white: 0xffffff,
-	    whitesmoke: 0xf5f5f5,
-	    yellow: 0xffff00,
-	    yellowgreen: 0x9acd32
-	  };
-	
-	  define(Color, color, {
-	    displayable: function() {
-	      return this.rgb().displayable();
-	    },
-	    toString: function() {
-	      return this.rgb() + "";
-	    }
-	  });
-	
-	  function color(format) {
-	    var m;
-	    format = (format + "").trim().toLowerCase();
-	    return (m = reHex3.exec(format)) ? (m = parseInt(m[1], 16), new Rgb((m >> 8 & 0xf) | (m >> 4 & 0x0f0), (m >> 4 & 0xf) | (m & 0xf0), ((m & 0xf) << 4) | (m & 0xf), 1)) // #f00
-	        : (m = reHex6.exec(format)) ? rgbn(parseInt(m[1], 16)) // #ff0000
-	        : (m = reRgbInteger.exec(format)) ? new Rgb(m[1], m[2], m[3], 1) // rgb(255, 0, 0)
-	        : (m = reRgbPercent.exec(format)) ? new Rgb(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, 1) // rgb(100%, 0%, 0%)
-	        : (m = reRgbaInteger.exec(format)) ? rgba(m[1], m[2], m[3], m[4]) // rgba(255, 0, 0, 1)
-	        : (m = reRgbaPercent.exec(format)) ? rgba(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, m[4]) // rgb(100%, 0%, 0%, 1)
-	        : (m = reHslPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, 1) // hsl(120, 50%, 50%)
-	        : (m = reHslaPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, m[4]) // hsla(120, 50%, 50%, 1)
-	        : named.hasOwnProperty(format) ? rgbn(named[format])
-	        : format === "transparent" ? new Rgb(NaN, NaN, NaN, 0)
-	        : null;
-	  }
-	
-	  function rgbn(n) {
-	    return new Rgb(n >> 16 & 0xff, n >> 8 & 0xff, n & 0xff, 1);
-	  }
-	
-	  function rgba(r, g, b, a) {
-	    if (a <= 0) r = g = b = NaN;
-	    return new Rgb(r, g, b, a);
-	  }
-	
-	  function rgbConvert(o) {
-	    if (!(o instanceof Color)) o = color(o);
-	    if (!o) return new Rgb;
-	    o = o.rgb();
-	    return new Rgb(o.r, o.g, o.b, o.opacity);
-	  }
-	
-	  function rgb(r, g, b, opacity) {
-	    return arguments.length === 1 ? rgbConvert(r) : new Rgb(r, g, b, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Rgb(r, g, b, opacity) {
-	    this.r = +r;
-	    this.g = +g;
-	    this.b = +b;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Rgb, rgb, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
-	    },
-	    rgb: function() {
-	      return this;
-	    },
-	    displayable: function() {
-	      return (0 <= this.r && this.r <= 255)
-	          && (0 <= this.g && this.g <= 255)
-	          && (0 <= this.b && this.b <= 255)
-	          && (0 <= this.opacity && this.opacity <= 1);
-	    },
-	    toString: function() {
-	      var a = this.opacity; a = isNaN(a) ? 1 : Math.max(0, Math.min(1, a));
-	      return (a === 1 ? "rgb(" : "rgba(")
-	          + Math.max(0, Math.min(255, Math.round(this.r) || 0)) + ", "
-	          + Math.max(0, Math.min(255, Math.round(this.g) || 0)) + ", "
-	          + Math.max(0, Math.min(255, Math.round(this.b) || 0))
-	          + (a === 1 ? ")" : ", " + a + ")");
-	    }
-	  }));
-	
-	  function hsla(h, s, l, a) {
-	    if (a <= 0) h = s = l = NaN;
-	    else if (l <= 0 || l >= 1) h = s = NaN;
-	    else if (s <= 0) h = NaN;
-	    return new Hsl(h, s, l, a);
-	  }
-	
-	  function hslConvert(o) {
-	    if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
-	    if (!(o instanceof Color)) o = color(o);
-	    if (!o) return new Hsl;
-	    if (o instanceof Hsl) return o;
-	    o = o.rgb();
-	    var r = o.r / 255,
-	        g = o.g / 255,
-	        b = o.b / 255,
-	        min = Math.min(r, g, b),
-	        max = Math.max(r, g, b),
-	        h = NaN,
-	        s = max - min,
-	        l = (max + min) / 2;
-	    if (s) {
-	      if (r === max) h = (g - b) / s + (g < b) * 6;
-	      else if (g === max) h = (b - r) / s + 2;
-	      else h = (r - g) / s + 4;
-	      s /= l < 0.5 ? max + min : 2 - max - min;
-	      h *= 60;
-	    } else {
-	      s = l > 0 && l < 1 ? 0 : h;
-	    }
-	    return new Hsl(h, s, l, o.opacity);
-	  }
-	
-	  function hsl(h, s, l, opacity) {
-	    return arguments.length === 1 ? hslConvert(h) : new Hsl(h, s, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Hsl(h, s, l, opacity) {
-	    this.h = +h;
-	    this.s = +s;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Hsl, hsl, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    rgb: function() {
-	      var h = this.h % 360 + (this.h < 0) * 360,
-	          s = isNaN(h) || isNaN(this.s) ? 0 : this.s,
-	          l = this.l,
-	          m2 = l + (l < 0.5 ? l : 1 - l) * s,
-	          m1 = 2 * l - m2;
-	      return new Rgb(
-	        hsl2rgb(h >= 240 ? h - 240 : h + 120, m1, m2),
-	        hsl2rgb(h, m1, m2),
-	        hsl2rgb(h < 120 ? h + 240 : h - 120, m1, m2),
-	        this.opacity
-	      );
-	    },
-	    displayable: function() {
-	      return (0 <= this.s && this.s <= 1 || isNaN(this.s))
-	          && (0 <= this.l && this.l <= 1)
-	          && (0 <= this.opacity && this.opacity <= 1);
-	    }
-	  }));
-	
-	  /* From FvD 13.37, CSS Color Module Level 3 */
-	  function hsl2rgb(h, m1, m2) {
-	    return (h < 60 ? m1 + (m2 - m1) * h / 60
-	        : h < 180 ? m2
-	        : h < 240 ? m1 + (m2 - m1) * (240 - h) / 60
-	        : m1) * 255;
-	  }
-	
-	  var deg2rad = Math.PI / 180;
-	  var rad2deg = 180 / Math.PI;
-	
-	  var Kn = 18;
-	  var Xn = 0.950470;
-	  var Yn = 1;
-	  var Zn = 1.088830;
-	  var t0 = 4 / 29;
-	  var t1 = 6 / 29;
-	  var t2 = 3 * t1 * t1;
-	  var t3 = t1 * t1 * t1;
-	  function labConvert(o) {
-	    if (o instanceof Lab) return new Lab(o.l, o.a, o.b, o.opacity);
-	    if (o instanceof Hcl) {
-	      var h = o.h * deg2rad;
-	      return new Lab(o.l, Math.cos(h) * o.c, Math.sin(h) * o.c, o.opacity);
-	    }
-	    if (!(o instanceof Rgb)) o = rgbConvert(o);
-	    var b = rgb2xyz(o.r),
-	        a = rgb2xyz(o.g),
-	        l = rgb2xyz(o.b),
-	        x = xyz2lab((0.4124564 * b + 0.3575761 * a + 0.1804375 * l) / Xn),
-	        y = xyz2lab((0.2126729 * b + 0.7151522 * a + 0.0721750 * l) / Yn),
-	        z = xyz2lab((0.0193339 * b + 0.1191920 * a + 0.9503041 * l) / Zn);
-	    return new Lab(116 * y - 16, 500 * (x - y), 200 * (y - z), o.opacity);
-	  }
-	
-	  function lab(l, a, b, opacity) {
-	    return arguments.length === 1 ? labConvert(l) : new Lab(l, a, b, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Lab(l, a, b, opacity) {
-	    this.l = +l;
-	    this.a = +a;
-	    this.b = +b;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Lab, lab, extend(Color, {
-	    brighter: function(k) {
-	      return new Lab(this.l + Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
-	    },
-	    darker: function(k) {
-	      return new Lab(this.l - Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
-	    },
-	    rgb: function() {
-	      var y = (this.l + 16) / 116,
-	          x = isNaN(this.a) ? y : y + this.a / 500,
-	          z = isNaN(this.b) ? y : y - this.b / 200;
-	      y = Yn * lab2xyz(y);
-	      x = Xn * lab2xyz(x);
-	      z = Zn * lab2xyz(z);
-	      return new Rgb(
-	        xyz2rgb( 3.2404542 * x - 1.5371385 * y - 0.4985314 * z), // D65 -> sRGB
-	        xyz2rgb(-0.9692660 * x + 1.8760108 * y + 0.0415560 * z),
-	        xyz2rgb( 0.0556434 * x - 0.2040259 * y + 1.0572252 * z),
-	        this.opacity
-	      );
-	    }
-	  }));
-	
-	  function xyz2lab(t) {
-	    return t > t3 ? Math.pow(t, 1 / 3) : t / t2 + t0;
-	  }
-	
-	  function lab2xyz(t) {
-	    return t > t1 ? t * t * t : t2 * (t - t0);
-	  }
-	
-	  function xyz2rgb(x) {
-	    return 255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055);
-	  }
-	
-	  function rgb2xyz(x) {
-	    return (x /= 255) <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-	  }
-	
-	  function hclConvert(o) {
-	    if (o instanceof Hcl) return new Hcl(o.h, o.c, o.l, o.opacity);
-	    if (!(o instanceof Lab)) o = labConvert(o);
-	    var h = Math.atan2(o.b, o.a) * rad2deg;
-	    return new Hcl(h < 0 ? h + 360 : h, Math.sqrt(o.a * o.a + o.b * o.b), o.l, o.opacity);
-	  }
-	
-	  function hcl(h, c, l, opacity) {
-	    return arguments.length === 1 ? hclConvert(h) : new Hcl(h, c, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Hcl(h, c, l, opacity) {
-	    this.h = +h;
-	    this.c = +c;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Hcl, hcl, extend(Color, {
-	    brighter: function(k) {
-	      return new Hcl(this.h, this.c, this.l + Kn * (k == null ? 1 : k), this.opacity);
-	    },
-	    darker: function(k) {
-	      return new Hcl(this.h, this.c, this.l - Kn * (k == null ? 1 : k), this.opacity);
-	    },
-	    rgb: function() {
-	      return labConvert(this).rgb();
-	    }
-	  }));
-	
-	  var A = -0.14861;
-	  var B = +1.78277;
-	  var C = -0.29227;
-	  var D = -0.90649;
-	  var E = +1.97294;
-	  var ED = E * D;
-	  var EB = E * B;
-	  var BC_DA = B * C - D * A;
-	  function cubehelixConvert(o) {
-	    if (o instanceof Cubehelix) return new Cubehelix(o.h, o.s, o.l, o.opacity);
-	    if (!(o instanceof Rgb)) o = rgbConvert(o);
-	    var r = o.r / 255,
-	        g = o.g / 255,
-	        b = o.b / 255,
-	        l = (BC_DA * b + ED * r - EB * g) / (BC_DA + ED - EB),
-	        bl = b - l,
-	        k = (E * (g - l) - C * bl) / D,
-	        s = Math.sqrt(k * k + bl * bl) / (E * l * (1 - l)), // NaN if l=0 or l=1
-	        h = s ? Math.atan2(k, bl) * rad2deg - 120 : NaN;
-	    return new Cubehelix(h < 0 ? h + 360 : h, s, l, o.opacity);
-	  }
-	
-	  function cubehelix(h, s, l, opacity) {
-	    return arguments.length === 1 ? cubehelixConvert(h) : new Cubehelix(h, s, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Cubehelix(h, s, l, opacity) {
-	    this.h = +h;
-	    this.s = +s;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Cubehelix, cubehelix, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    rgb: function() {
-	      var h = isNaN(this.h) ? 0 : (this.h + 120) * deg2rad,
-	          l = +this.l,
-	          a = isNaN(this.s) ? 0 : this.s * l * (1 - l),
-	          cosh = Math.cos(h),
-	          sinh = Math.sin(h);
-	      return new Rgb(
-	        255 * (l + a * (A * cosh + B * sinh)),
-	        255 * (l + a * (C * cosh + D * sinh)),
-	        255 * (l + a * (E * cosh)),
-	        this.opacity
-	      );
-	    }
-	  }));
-	
-	  var version = "0.4.2";
-	
-	  exports.version = version;
-	  exports.color = color;
-	  exports.rgb = rgb;
-	  exports.hsl = hsl;
-	  exports.lab = lab;
-	  exports.hcl = hcl;
-	  exports.cubehelix = cubehelix;
-	
-	}));
-
-/***/ },
-/* 17 */
+/* 18 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
@@ -5649,7 +4999,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
-/* 18 */
+/* 19 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
@@ -6003,11 +5353,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
-/* 19 */
+/* 20 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
-	   true ? factory(exports, __webpack_require__(18)) :
+	   true ? factory(exports, __webpack_require__(19)) :
 	  typeof define === 'function' && define.amd ? define(['exports', 'd3-time'], factory) :
 	  (factory((global.d3_time_format = {}),global.d3_time));
 	}(this, function (exports,d3Time) { 'use strict';
@@ -6839,856 +6189,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	  exports.isoParse = parseIso;
 	
 	}));
-
-/***/ },
-/* 20 */
-/***/ function(module, exports, __webpack_require__) {
-
-	(function (global, factory) {
-	   true ? factory(exports) :
-	  typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	  (factory((global.d3_color = global.d3_color || {})));
-	}(this, function (exports) { 'use strict';
-	
-	  function define(constructor, factory, prototype) {
-	    constructor.prototype = factory.prototype = prototype;
-	    prototype.constructor = constructor;
-	  }
-	
-	  function extend(parent, definition) {
-	    var prototype = Object.create(parent.prototype);
-	    for (var key in definition) prototype[key] = definition[key];
-	    return prototype;
-	  }
-	
-	  function Color() {}
-	
-	  var darker = 0.7;
-	  var brighter = 1 / darker;
-	
-	  var reHex3 = /^#([0-9a-f]{3})$/;
-	  var reHex6 = /^#([0-9a-f]{6})$/;
-	  var reRgbInteger = /^rgb\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*\)$/;
-	  var reRgbPercent = /^rgb\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
-	  var reRgbaInteger = /^rgba\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var reRgbaPercent = /^rgba\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var reHslPercent = /^hsl\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
-	  var reHslaPercent = /^hsla\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var named = {
-	    aliceblue: 0xf0f8ff,
-	    antiquewhite: 0xfaebd7,
-	    aqua: 0x00ffff,
-	    aquamarine: 0x7fffd4,
-	    azure: 0xf0ffff,
-	    beige: 0xf5f5dc,
-	    bisque: 0xffe4c4,
-	    black: 0x000000,
-	    blanchedalmond: 0xffebcd,
-	    blue: 0x0000ff,
-	    blueviolet: 0x8a2be2,
-	    brown: 0xa52a2a,
-	    burlywood: 0xdeb887,
-	    cadetblue: 0x5f9ea0,
-	    chartreuse: 0x7fff00,
-	    chocolate: 0xd2691e,
-	    coral: 0xff7f50,
-	    cornflowerblue: 0x6495ed,
-	    cornsilk: 0xfff8dc,
-	    crimson: 0xdc143c,
-	    cyan: 0x00ffff,
-	    darkblue: 0x00008b,
-	    darkcyan: 0x008b8b,
-	    darkgoldenrod: 0xb8860b,
-	    darkgray: 0xa9a9a9,
-	    darkgreen: 0x006400,
-	    darkgrey: 0xa9a9a9,
-	    darkkhaki: 0xbdb76b,
-	    darkmagenta: 0x8b008b,
-	    darkolivegreen: 0x556b2f,
-	    darkorange: 0xff8c00,
-	    darkorchid: 0x9932cc,
-	    darkred: 0x8b0000,
-	    darksalmon: 0xe9967a,
-	    darkseagreen: 0x8fbc8f,
-	    darkslateblue: 0x483d8b,
-	    darkslategray: 0x2f4f4f,
-	    darkslategrey: 0x2f4f4f,
-	    darkturquoise: 0x00ced1,
-	    darkviolet: 0x9400d3,
-	    deeppink: 0xff1493,
-	    deepskyblue: 0x00bfff,
-	    dimgray: 0x696969,
-	    dimgrey: 0x696969,
-	    dodgerblue: 0x1e90ff,
-	    firebrick: 0xb22222,
-	    floralwhite: 0xfffaf0,
-	    forestgreen: 0x228b22,
-	    fuchsia: 0xff00ff,
-	    gainsboro: 0xdcdcdc,
-	    ghostwhite: 0xf8f8ff,
-	    gold: 0xffd700,
-	    goldenrod: 0xdaa520,
-	    gray: 0x808080,
-	    green: 0x008000,
-	    greenyellow: 0xadff2f,
-	    grey: 0x808080,
-	    honeydew: 0xf0fff0,
-	    hotpink: 0xff69b4,
-	    indianred: 0xcd5c5c,
-	    indigo: 0x4b0082,
-	    ivory: 0xfffff0,
-	    khaki: 0xf0e68c,
-	    lavender: 0xe6e6fa,
-	    lavenderblush: 0xfff0f5,
-	    lawngreen: 0x7cfc00,
-	    lemonchiffon: 0xfffacd,
-	    lightblue: 0xadd8e6,
-	    lightcoral: 0xf08080,
-	    lightcyan: 0xe0ffff,
-	    lightgoldenrodyellow: 0xfafad2,
-	    lightgray: 0xd3d3d3,
-	    lightgreen: 0x90ee90,
-	    lightgrey: 0xd3d3d3,
-	    lightpink: 0xffb6c1,
-	    lightsalmon: 0xffa07a,
-	    lightseagreen: 0x20b2aa,
-	    lightskyblue: 0x87cefa,
-	    lightslategray: 0x778899,
-	    lightslategrey: 0x778899,
-	    lightsteelblue: 0xb0c4de,
-	    lightyellow: 0xffffe0,
-	    lime: 0x00ff00,
-	    limegreen: 0x32cd32,
-	    linen: 0xfaf0e6,
-	    magenta: 0xff00ff,
-	    maroon: 0x800000,
-	    mediumaquamarine: 0x66cdaa,
-	    mediumblue: 0x0000cd,
-	    mediumorchid: 0xba55d3,
-	    mediumpurple: 0x9370db,
-	    mediumseagreen: 0x3cb371,
-	    mediumslateblue: 0x7b68ee,
-	    mediumspringgreen: 0x00fa9a,
-	    mediumturquoise: 0x48d1cc,
-	    mediumvioletred: 0xc71585,
-	    midnightblue: 0x191970,
-	    mintcream: 0xf5fffa,
-	    mistyrose: 0xffe4e1,
-	    moccasin: 0xffe4b5,
-	    navajowhite: 0xffdead,
-	    navy: 0x000080,
-	    oldlace: 0xfdf5e6,
-	    olive: 0x808000,
-	    olivedrab: 0x6b8e23,
-	    orange: 0xffa500,
-	    orangered: 0xff4500,
-	    orchid: 0xda70d6,
-	    palegoldenrod: 0xeee8aa,
-	    palegreen: 0x98fb98,
-	    paleturquoise: 0xafeeee,
-	    palevioletred: 0xdb7093,
-	    papayawhip: 0xffefd5,
-	    peachpuff: 0xffdab9,
-	    peru: 0xcd853f,
-	    pink: 0xffc0cb,
-	    plum: 0xdda0dd,
-	    powderblue: 0xb0e0e6,
-	    purple: 0x800080,
-	    rebeccapurple: 0x663399,
-	    red: 0xff0000,
-	    rosybrown: 0xbc8f8f,
-	    royalblue: 0x4169e1,
-	    saddlebrown: 0x8b4513,
-	    salmon: 0xfa8072,
-	    sandybrown: 0xf4a460,
-	    seagreen: 0x2e8b57,
-	    seashell: 0xfff5ee,
-	    sienna: 0xa0522d,
-	    silver: 0xc0c0c0,
-	    skyblue: 0x87ceeb,
-	    slateblue: 0x6a5acd,
-	    slategray: 0x708090,
-	    slategrey: 0x708090,
-	    snow: 0xfffafa,
-	    springgreen: 0x00ff7f,
-	    steelblue: 0x4682b4,
-	    tan: 0xd2b48c,
-	    teal: 0x008080,
-	    thistle: 0xd8bfd8,
-	    tomato: 0xff6347,
-	    turquoise: 0x40e0d0,
-	    violet: 0xee82ee,
-	    wheat: 0xf5deb3,
-	    white: 0xffffff,
-	    whitesmoke: 0xf5f5f5,
-	    yellow: 0xffff00,
-	    yellowgreen: 0x9acd32
-	  };
-	
-	  define(Color, color, {
-	    displayable: function() {
-	      return this.rgb().displayable();
-	    },
-	    toString: function() {
-	      return this.rgb() + "";
-	    }
-	  });
-	
-	  function color(format) {
-	    var m;
-	    format = (format + "").trim().toLowerCase();
-	    return (m = reHex3.exec(format)) ? (m = parseInt(m[1], 16), new Rgb((m >> 8 & 0xf) | (m >> 4 & 0x0f0), (m >> 4 & 0xf) | (m & 0xf0), ((m & 0xf) << 4) | (m & 0xf), 1)) // #f00
-	        : (m = reHex6.exec(format)) ? rgbn(parseInt(m[1], 16)) // #ff0000
-	        : (m = reRgbInteger.exec(format)) ? new Rgb(m[1], m[2], m[3], 1) // rgb(255, 0, 0)
-	        : (m = reRgbPercent.exec(format)) ? new Rgb(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, 1) // rgb(100%, 0%, 0%)
-	        : (m = reRgbaInteger.exec(format)) ? rgba(m[1], m[2], m[3], m[4]) // rgba(255, 0, 0, 1)
-	        : (m = reRgbaPercent.exec(format)) ? rgba(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, m[4]) // rgb(100%, 0%, 0%, 1)
-	        : (m = reHslPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, 1) // hsl(120, 50%, 50%)
-	        : (m = reHslaPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, m[4]) // hsla(120, 50%, 50%, 1)
-	        : named.hasOwnProperty(format) ? rgbn(named[format])
-	        : format === "transparent" ? new Rgb(NaN, NaN, NaN, 0)
-	        : null;
-	  }
-	
-	  function rgbn(n) {
-	    return new Rgb(n >> 16 & 0xff, n >> 8 & 0xff, n & 0xff, 1);
-	  }
-	
-	  function rgba(r, g, b, a) {
-	    if (a <= 0) r = g = b = NaN;
-	    return new Rgb(r, g, b, a);
-	  }
-	
-	  function rgbConvert(o) {
-	    if (!(o instanceof Color)) o = color(o);
-	    if (!o) return new Rgb;
-	    o = o.rgb();
-	    return new Rgb(o.r, o.g, o.b, o.opacity);
-	  }
-	
-	  function rgb(r, g, b, opacity) {
-	    return arguments.length === 1 ? rgbConvert(r) : new Rgb(r, g, b, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Rgb(r, g, b, opacity) {
-	    this.r = +r;
-	    this.g = +g;
-	    this.b = +b;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Rgb, rgb, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
-	    },
-	    rgb: function() {
-	      return this;
-	    },
-	    displayable: function() {
-	      return (0 <= this.r && this.r <= 255)
-	          && (0 <= this.g && this.g <= 255)
-	          && (0 <= this.b && this.b <= 255)
-	          && (0 <= this.opacity && this.opacity <= 1);
-	    },
-	    toString: function() {
-	      var a = this.opacity; a = isNaN(a) ? 1 : Math.max(0, Math.min(1, a));
-	      return (a === 1 ? "rgb(" : "rgba(")
-	          + Math.max(0, Math.min(255, Math.round(this.r) || 0)) + ", "
-	          + Math.max(0, Math.min(255, Math.round(this.g) || 0)) + ", "
-	          + Math.max(0, Math.min(255, Math.round(this.b) || 0))
-	          + (a === 1 ? ")" : ", " + a + ")");
-	    }
-	  }));
-	
-	  function hsla(h, s, l, a) {
-	    if (a <= 0) h = s = l = NaN;
-	    else if (l <= 0 || l >= 1) h = s = NaN;
-	    else if (s <= 0) h = NaN;
-	    return new Hsl(h, s, l, a);
-	  }
-	
-	  function hslConvert(o) {
-	    if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
-	    if (!(o instanceof Color)) o = color(o);
-	    if (!o) return new Hsl;
-	    if (o instanceof Hsl) return o;
-	    o = o.rgb();
-	    var r = o.r / 255,
-	        g = o.g / 255,
-	        b = o.b / 255,
-	        min = Math.min(r, g, b),
-	        max = Math.max(r, g, b),
-	        h = NaN,
-	        s = max - min,
-	        l = (max + min) / 2;
-	    if (s) {
-	      if (r === max) h = (g - b) / s + (g < b) * 6;
-	      else if (g === max) h = (b - r) / s + 2;
-	      else h = (r - g) / s + 4;
-	      s /= l < 0.5 ? max + min : 2 - max - min;
-	      h *= 60;
-	    } else {
-	      s = l > 0 && l < 1 ? 0 : h;
-	    }
-	    return new Hsl(h, s, l, o.opacity);
-	  }
-	
-	  function hsl(h, s, l, opacity) {
-	    return arguments.length === 1 ? hslConvert(h) : new Hsl(h, s, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Hsl(h, s, l, opacity) {
-	    this.h = +h;
-	    this.s = +s;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Hsl, hsl, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    rgb: function() {
-	      var h = this.h % 360 + (this.h < 0) * 360,
-	          s = isNaN(h) || isNaN(this.s) ? 0 : this.s,
-	          l = this.l,
-	          m2 = l + (l < 0.5 ? l : 1 - l) * s,
-	          m1 = 2 * l - m2;
-	      return new Rgb(
-	        hsl2rgb(h >= 240 ? h - 240 : h + 120, m1, m2),
-	        hsl2rgb(h, m1, m2),
-	        hsl2rgb(h < 120 ? h + 240 : h - 120, m1, m2),
-	        this.opacity
-	      );
-	    },
-	    displayable: function() {
-	      return (0 <= this.s && this.s <= 1 || isNaN(this.s))
-	          && (0 <= this.l && this.l <= 1)
-	          && (0 <= this.opacity && this.opacity <= 1);
-	    }
-	  }));
-	
-	  /* From FvD 13.37, CSS Color Module Level 3 */
-	  function hsl2rgb(h, m1, m2) {
-	    return (h < 60 ? m1 + (m2 - m1) * h / 60
-	        : h < 180 ? m2
-	        : h < 240 ? m1 + (m2 - m1) * (240 - h) / 60
-	        : m1) * 255;
-	  }
-	
-	  var deg2rad = Math.PI / 180;
-	  var rad2deg = 180 / Math.PI;
-	
-	  var Kn = 18;
-	  var Xn = 0.950470;
-	  var Yn = 1;
-	  var Zn = 1.088830;
-	  var t0 = 4 / 29;
-	  var t1 = 6 / 29;
-	  var t2 = 3 * t1 * t1;
-	  var t3 = t1 * t1 * t1;
-	  function labConvert(o) {
-	    if (o instanceof Lab) return new Lab(o.l, o.a, o.b, o.opacity);
-	    if (o instanceof Hcl) {
-	      var h = o.h * deg2rad;
-	      return new Lab(o.l, Math.cos(h) * o.c, Math.sin(h) * o.c, o.opacity);
-	    }
-	    if (!(o instanceof Rgb)) o = rgbConvert(o);
-	    var b = rgb2xyz(o.r),
-	        a = rgb2xyz(o.g),
-	        l = rgb2xyz(o.b),
-	        x = xyz2lab((0.4124564 * b + 0.3575761 * a + 0.1804375 * l) / Xn),
-	        y = xyz2lab((0.2126729 * b + 0.7151522 * a + 0.0721750 * l) / Yn),
-	        z = xyz2lab((0.0193339 * b + 0.1191920 * a + 0.9503041 * l) / Zn);
-	    return new Lab(116 * y - 16, 500 * (x - y), 200 * (y - z), o.opacity);
-	  }
-	
-	  function lab(l, a, b, opacity) {
-	    return arguments.length === 1 ? labConvert(l) : new Lab(l, a, b, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Lab(l, a, b, opacity) {
-	    this.l = +l;
-	    this.a = +a;
-	    this.b = +b;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Lab, lab, extend(Color, {
-	    brighter: function(k) {
-	      return new Lab(this.l + Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
-	    },
-	    darker: function(k) {
-	      return new Lab(this.l - Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
-	    },
-	    rgb: function() {
-	      var y = (this.l + 16) / 116,
-	          x = isNaN(this.a) ? y : y + this.a / 500,
-	          z = isNaN(this.b) ? y : y - this.b / 200;
-	      y = Yn * lab2xyz(y);
-	      x = Xn * lab2xyz(x);
-	      z = Zn * lab2xyz(z);
-	      return new Rgb(
-	        xyz2rgb( 3.2404542 * x - 1.5371385 * y - 0.4985314 * z), // D65 -> sRGB
-	        xyz2rgb(-0.9692660 * x + 1.8760108 * y + 0.0415560 * z),
-	        xyz2rgb( 0.0556434 * x - 0.2040259 * y + 1.0572252 * z),
-	        this.opacity
-	      );
-	    }
-	  }));
-	
-	  function xyz2lab(t) {
-	    return t > t3 ? Math.pow(t, 1 / 3) : t / t2 + t0;
-	  }
-	
-	  function lab2xyz(t) {
-	    return t > t1 ? t * t * t : t2 * (t - t0);
-	  }
-	
-	  function xyz2rgb(x) {
-	    return 255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055);
-	  }
-	
-	  function rgb2xyz(x) {
-	    return (x /= 255) <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-	  }
-	
-	  function hclConvert(o) {
-	    if (o instanceof Hcl) return new Hcl(o.h, o.c, o.l, o.opacity);
-	    if (!(o instanceof Lab)) o = labConvert(o);
-	    var h = Math.atan2(o.b, o.a) * rad2deg;
-	    return new Hcl(h < 0 ? h + 360 : h, Math.sqrt(o.a * o.a + o.b * o.b), o.l, o.opacity);
-	  }
-	
-	  function hcl(h, c, l, opacity) {
-	    return arguments.length === 1 ? hclConvert(h) : new Hcl(h, c, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Hcl(h, c, l, opacity) {
-	    this.h = +h;
-	    this.c = +c;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Hcl, hcl, extend(Color, {
-	    brighter: function(k) {
-	      return new Hcl(this.h, this.c, this.l + Kn * (k == null ? 1 : k), this.opacity);
-	    },
-	    darker: function(k) {
-	      return new Hcl(this.h, this.c, this.l - Kn * (k == null ? 1 : k), this.opacity);
-	    },
-	    rgb: function() {
-	      return labConvert(this).rgb();
-	    }
-	  }));
-	
-	  var A = -0.14861;
-	  var B = +1.78277;
-	  var C = -0.29227;
-	  var D = -0.90649;
-	  var E = +1.97294;
-	  var ED = E * D;
-	  var EB = E * B;
-	  var BC_DA = B * C - D * A;
-	  function cubehelixConvert(o) {
-	    if (o instanceof Cubehelix) return new Cubehelix(o.h, o.s, o.l, o.opacity);
-	    if (!(o instanceof Rgb)) o = rgbConvert(o);
-	    var r = o.r / 255,
-	        g = o.g / 255,
-	        b = o.b / 255,
-	        l = (BC_DA * b + ED * r - EB * g) / (BC_DA + ED - EB),
-	        bl = b - l,
-	        k = (E * (g - l) - C * bl) / D,
-	        s = Math.sqrt(k * k + bl * bl) / (E * l * (1 - l)), // NaN if l=0 or l=1
-	        h = s ? Math.atan2(k, bl) * rad2deg - 120 : NaN;
-	    return new Cubehelix(h < 0 ? h + 360 : h, s, l, o.opacity);
-	  }
-	
-	  function cubehelix(h, s, l, opacity) {
-	    return arguments.length === 1 ? cubehelixConvert(h) : new Cubehelix(h, s, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Cubehelix(h, s, l, opacity) {
-	    this.h = +h;
-	    this.s = +s;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Cubehelix, cubehelix, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    rgb: function() {
-	      var h = isNaN(this.h) ? 0 : (this.h + 120) * deg2rad,
-	          l = +this.l,
-	          a = isNaN(this.s) ? 0 : this.s * l * (1 - l),
-	          cosh = Math.cos(h),
-	          sinh = Math.sin(h);
-	      return new Rgb(
-	        255 * (l + a * (A * cosh + B * sinh)),
-	        255 * (l + a * (C * cosh + D * sinh)),
-	        255 * (l + a * (E * cosh)),
-	        this.opacity
-	      );
-	    }
-	  }));
-	
-	  var version = "0.4.2";
-	
-	  exports.version = version;
-	  exports.color = color;
-	  exports.rgb = rgb;
-	  exports.hsl = hsl;
-	  exports.lab = lab;
-	  exports.hcl = hcl;
-	  exports.cubehelix = cubehelix;
-	
-	}));
-
-/***/ },
-/* 21 */
-/***/ function(module, exports, __webpack_require__) {
-
-	module.exports = __webpack_require__(22);
-
-
-/***/ },
-/* 22 */
-/***/ function(module, exports, __webpack_require__) {
-
-	var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_RESULT__;// This product includes color specifications and designs developed by Cynthia Brewer (http://colorbrewer.org/).
-	// JavaScript specs as packaged in the D3 library (d3js.org). Please see license at http://colorbrewer.org/export/LICENSE.txt
-	!function() {
-	
-	var colorbrewer = {YlGn: {
-	3: ["#f7fcb9","#addd8e","#31a354"],
-	4: ["#ffffcc","#c2e699","#78c679","#238443"],
-	5: ["#ffffcc","#c2e699","#78c679","#31a354","#006837"],
-	6: ["#ffffcc","#d9f0a3","#addd8e","#78c679","#31a354","#006837"],
-	7: ["#ffffcc","#d9f0a3","#addd8e","#78c679","#41ab5d","#238443","#005a32"],
-	8: ["#ffffe5","#f7fcb9","#d9f0a3","#addd8e","#78c679","#41ab5d","#238443","#005a32"],
-	9: ["#ffffe5","#f7fcb9","#d9f0a3","#addd8e","#78c679","#41ab5d","#238443","#006837","#004529"]
-	},YlGnBu: {
-	3: ["#edf8b1","#7fcdbb","#2c7fb8"],
-	4: ["#ffffcc","#a1dab4","#41b6c4","#225ea8"],
-	5: ["#ffffcc","#a1dab4","#41b6c4","#2c7fb8","#253494"],
-	6: ["#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#2c7fb8","#253494"],
-	7: ["#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#0c2c84"],
-	8: ["#ffffd9","#edf8b1","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#0c2c84"],
-	9: ["#ffffd9","#edf8b1","#c7e9b4","#7fcdbb","#41b6c4","#1d91c0","#225ea8","#253494","#081d58"]
-	},GnBu: {
-	3: ["#e0f3db","#a8ddb5","#43a2ca"],
-	4: ["#f0f9e8","#bae4bc","#7bccc4","#2b8cbe"],
-	5: ["#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac"],
-	6: ["#f0f9e8","#ccebc5","#a8ddb5","#7bccc4","#43a2ca","#0868ac"],
-	7: ["#f0f9e8","#ccebc5","#a8ddb5","#7bccc4","#4eb3d3","#2b8cbe","#08589e"],
-	8: ["#f7fcf0","#e0f3db","#ccebc5","#a8ddb5","#7bccc4","#4eb3d3","#2b8cbe","#08589e"],
-	9: ["#f7fcf0","#e0f3db","#ccebc5","#a8ddb5","#7bccc4","#4eb3d3","#2b8cbe","#0868ac","#084081"]
-	},BuGn: {
-	3: ["#e5f5f9","#99d8c9","#2ca25f"],
-	4: ["#edf8fb","#b2e2e2","#66c2a4","#238b45"],
-	5: ["#edf8fb","#b2e2e2","#66c2a4","#2ca25f","#006d2c"],
-	6: ["#edf8fb","#ccece6","#99d8c9","#66c2a4","#2ca25f","#006d2c"],
-	7: ["#edf8fb","#ccece6","#99d8c9","#66c2a4","#41ae76","#238b45","#005824"],
-	8: ["#f7fcfd","#e5f5f9","#ccece6","#99d8c9","#66c2a4","#41ae76","#238b45","#005824"],
-	9: ["#f7fcfd","#e5f5f9","#ccece6","#99d8c9","#66c2a4","#41ae76","#238b45","#006d2c","#00441b"]
-	},PuBuGn: {
-	3: ["#ece2f0","#a6bddb","#1c9099"],
-	4: ["#f6eff7","#bdc9e1","#67a9cf","#02818a"],
-	5: ["#f6eff7","#bdc9e1","#67a9cf","#1c9099","#016c59"],
-	6: ["#f6eff7","#d0d1e6","#a6bddb","#67a9cf","#1c9099","#016c59"],
-	7: ["#f6eff7","#d0d1e6","#a6bddb","#67a9cf","#3690c0","#02818a","#016450"],
-	8: ["#fff7fb","#ece2f0","#d0d1e6","#a6bddb","#67a9cf","#3690c0","#02818a","#016450"],
-	9: ["#fff7fb","#ece2f0","#d0d1e6","#a6bddb","#67a9cf","#3690c0","#02818a","#016c59","#014636"]
-	},PuBu: {
-	3: ["#ece7f2","#a6bddb","#2b8cbe"],
-	4: ["#f1eef6","#bdc9e1","#74a9cf","#0570b0"],
-	5: ["#f1eef6","#bdc9e1","#74a9cf","#2b8cbe","#045a8d"],
-	6: ["#f1eef6","#d0d1e6","#a6bddb","#74a9cf","#2b8cbe","#045a8d"],
-	7: ["#f1eef6","#d0d1e6","#a6bddb","#74a9cf","#3690c0","#0570b0","#034e7b"],
-	8: ["#fff7fb","#ece7f2","#d0d1e6","#a6bddb","#74a9cf","#3690c0","#0570b0","#034e7b"],
-	9: ["#fff7fb","#ece7f2","#d0d1e6","#a6bddb","#74a9cf","#3690c0","#0570b0","#045a8d","#023858"]
-	},BuPu: {
-	3: ["#e0ecf4","#9ebcda","#8856a7"],
-	4: ["#edf8fb","#b3cde3","#8c96c6","#88419d"],
-	5: ["#edf8fb","#b3cde3","#8c96c6","#8856a7","#810f7c"],
-	6: ["#edf8fb","#bfd3e6","#9ebcda","#8c96c6","#8856a7","#810f7c"],
-	7: ["#edf8fb","#bfd3e6","#9ebcda","#8c96c6","#8c6bb1","#88419d","#6e016b"],
-	8: ["#f7fcfd","#e0ecf4","#bfd3e6","#9ebcda","#8c96c6","#8c6bb1","#88419d","#6e016b"],
-	9: ["#f7fcfd","#e0ecf4","#bfd3e6","#9ebcda","#8c96c6","#8c6bb1","#88419d","#810f7c","#4d004b"]
-	},RdPu: {
-	3: ["#fde0dd","#fa9fb5","#c51b8a"],
-	4: ["#feebe2","#fbb4b9","#f768a1","#ae017e"],
-	5: ["#feebe2","#fbb4b9","#f768a1","#c51b8a","#7a0177"],
-	6: ["#feebe2","#fcc5c0","#fa9fb5","#f768a1","#c51b8a","#7a0177"],
-	7: ["#feebe2","#fcc5c0","#fa9fb5","#f768a1","#dd3497","#ae017e","#7a0177"],
-	8: ["#fff7f3","#fde0dd","#fcc5c0","#fa9fb5","#f768a1","#dd3497","#ae017e","#7a0177"],
-	9: ["#fff7f3","#fde0dd","#fcc5c0","#fa9fb5","#f768a1","#dd3497","#ae017e","#7a0177","#49006a"]
-	},PuRd: {
-	3: ["#e7e1ef","#c994c7","#dd1c77"],
-	4: ["#f1eef6","#d7b5d8","#df65b0","#ce1256"],
-	5: ["#f1eef6","#d7b5d8","#df65b0","#dd1c77","#980043"],
-	6: ["#f1eef6","#d4b9da","#c994c7","#df65b0","#dd1c77","#980043"],
-	7: ["#f1eef6","#d4b9da","#c994c7","#df65b0","#e7298a","#ce1256","#91003f"],
-	8: ["#f7f4f9","#e7e1ef","#d4b9da","#c994c7","#df65b0","#e7298a","#ce1256","#91003f"],
-	9: ["#f7f4f9","#e7e1ef","#d4b9da","#c994c7","#df65b0","#e7298a","#ce1256","#980043","#67001f"]
-	},OrRd: {
-	3: ["#fee8c8","#fdbb84","#e34a33"],
-	4: ["#fef0d9","#fdcc8a","#fc8d59","#d7301f"],
-	5: ["#fef0d9","#fdcc8a","#fc8d59","#e34a33","#b30000"],
-	6: ["#fef0d9","#fdd49e","#fdbb84","#fc8d59","#e34a33","#b30000"],
-	7: ["#fef0d9","#fdd49e","#fdbb84","#fc8d59","#ef6548","#d7301f","#990000"],
-	8: ["#fff7ec","#fee8c8","#fdd49e","#fdbb84","#fc8d59","#ef6548","#d7301f","#990000"],
-	9: ["#fff7ec","#fee8c8","#fdd49e","#fdbb84","#fc8d59","#ef6548","#d7301f","#b30000","#7f0000"]
-	},YlOrRd: {
-	3: ["#ffeda0","#feb24c","#f03b20"],
-	4: ["#ffffb2","#fecc5c","#fd8d3c","#e31a1c"],
-	5: ["#ffffb2","#fecc5c","#fd8d3c","#f03b20","#bd0026"],
-	6: ["#ffffb2","#fed976","#feb24c","#fd8d3c","#f03b20","#bd0026"],
-	7: ["#ffffb2","#fed976","#feb24c","#fd8d3c","#fc4e2a","#e31a1c","#b10026"],
-	8: ["#ffffcc","#ffeda0","#fed976","#feb24c","#fd8d3c","#fc4e2a","#e31a1c","#b10026"],
-	9: ["#ffffcc","#ffeda0","#fed976","#feb24c","#fd8d3c","#fc4e2a","#e31a1c","#bd0026","#800026"]
-	},YlOrBr: {
-	3: ["#fff7bc","#fec44f","#d95f0e"],
-	4: ["#ffffd4","#fed98e","#fe9929","#cc4c02"],
-	5: ["#ffffd4","#fed98e","#fe9929","#d95f0e","#993404"],
-	6: ["#ffffd4","#fee391","#fec44f","#fe9929","#d95f0e","#993404"],
-	7: ["#ffffd4","#fee391","#fec44f","#fe9929","#ec7014","#cc4c02","#8c2d04"],
-	8: ["#ffffe5","#fff7bc","#fee391","#fec44f","#fe9929","#ec7014","#cc4c02","#8c2d04"],
-	9: ["#ffffe5","#fff7bc","#fee391","#fec44f","#fe9929","#ec7014","#cc4c02","#993404","#662506"]
-	},Purples: {
-	3: ["#efedf5","#bcbddc","#756bb1"],
-	4: ["#f2f0f7","#cbc9e2","#9e9ac8","#6a51a3"],
-	5: ["#f2f0f7","#cbc9e2","#9e9ac8","#756bb1","#54278f"],
-	6: ["#f2f0f7","#dadaeb","#bcbddc","#9e9ac8","#756bb1","#54278f"],
-	7: ["#f2f0f7","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#4a1486"],
-	8: ["#fcfbfd","#efedf5","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#4a1486"],
-	9: ["#fcfbfd","#efedf5","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#54278f","#3f007d"]
-	},Blues: {
-	3: ["#deebf7","#9ecae1","#3182bd"],
-	4: ["#eff3ff","#bdd7e7","#6baed6","#2171b5"],
-	5: ["#eff3ff","#bdd7e7","#6baed6","#3182bd","#08519c"],
-	6: ["#eff3ff","#c6dbef","#9ecae1","#6baed6","#3182bd","#08519c"],
-	7: ["#eff3ff","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5","#084594"],
-	8: ["#f7fbff","#deebf7","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5","#084594"],
-	9: ["#f7fbff","#deebf7","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5","#08519c","#08306b"]
-	},Greens: {
-	3: ["#e5f5e0","#a1d99b","#31a354"],
-	4: ["#edf8e9","#bae4b3","#74c476","#238b45"],
-	5: ["#edf8e9","#bae4b3","#74c476","#31a354","#006d2c"],
-	6: ["#edf8e9","#c7e9c0","#a1d99b","#74c476","#31a354","#006d2c"],
-	7: ["#edf8e9","#c7e9c0","#a1d99b","#74c476","#41ab5d","#238b45","#005a32"],
-	8: ["#f7fcf5","#e5f5e0","#c7e9c0","#a1d99b","#74c476","#41ab5d","#238b45","#005a32"],
-	9: ["#f7fcf5","#e5f5e0","#c7e9c0","#a1d99b","#74c476","#41ab5d","#238b45","#006d2c","#00441b"]
-	},Oranges: {
-	3: ["#fee6ce","#fdae6b","#e6550d"],
-	4: ["#feedde","#fdbe85","#fd8d3c","#d94701"],
-	5: ["#feedde","#fdbe85","#fd8d3c","#e6550d","#a63603"],
-	6: ["#feedde","#fdd0a2","#fdae6b","#fd8d3c","#e6550d","#a63603"],
-	7: ["#feedde","#fdd0a2","#fdae6b","#fd8d3c","#f16913","#d94801","#8c2d04"],
-	8: ["#fff5eb","#fee6ce","#fdd0a2","#fdae6b","#fd8d3c","#f16913","#d94801","#8c2d04"],
-	9: ["#fff5eb","#fee6ce","#fdd0a2","#fdae6b","#fd8d3c","#f16913","#d94801","#a63603","#7f2704"]
-	},Reds: {
-	3: ["#fee0d2","#fc9272","#de2d26"],
-	4: ["#fee5d9","#fcae91","#fb6a4a","#cb181d"],
-	5: ["#fee5d9","#fcae91","#fb6a4a","#de2d26","#a50f15"],
-	6: ["#fee5d9","#fcbba1","#fc9272","#fb6a4a","#de2d26","#a50f15"],
-	7: ["#fee5d9","#fcbba1","#fc9272","#fb6a4a","#ef3b2c","#cb181d","#99000d"],
-	8: ["#fff5f0","#fee0d2","#fcbba1","#fc9272","#fb6a4a","#ef3b2c","#cb181d","#99000d"],
-	9: ["#fff5f0","#fee0d2","#fcbba1","#fc9272","#fb6a4a","#ef3b2c","#cb181d","#a50f15","#67000d"]
-	},Greys: {
-	3: ["#f0f0f0","#bdbdbd","#636363"],
-	4: ["#f7f7f7","#cccccc","#969696","#525252"],
-	5: ["#f7f7f7","#cccccc","#969696","#636363","#252525"],
-	6: ["#f7f7f7","#d9d9d9","#bdbdbd","#969696","#636363","#252525"],
-	7: ["#f7f7f7","#d9d9d9","#bdbdbd","#969696","#737373","#525252","#252525"],
-	8: ["#ffffff","#f0f0f0","#d9d9d9","#bdbdbd","#969696","#737373","#525252","#252525"],
-	9: ["#ffffff","#f0f0f0","#d9d9d9","#bdbdbd","#969696","#737373","#525252","#252525","#000000"]
-	},PuOr: {
-	3: ["#f1a340","#f7f7f7","#998ec3"],
-	4: ["#e66101","#fdb863","#b2abd2","#5e3c99"],
-	5: ["#e66101","#fdb863","#f7f7f7","#b2abd2","#5e3c99"],
-	6: ["#b35806","#f1a340","#fee0b6","#d8daeb","#998ec3","#542788"],
-	7: ["#b35806","#f1a340","#fee0b6","#f7f7f7","#d8daeb","#998ec3","#542788"],
-	8: ["#b35806","#e08214","#fdb863","#fee0b6","#d8daeb","#b2abd2","#8073ac","#542788"],
-	9: ["#b35806","#e08214","#fdb863","#fee0b6","#f7f7f7","#d8daeb","#b2abd2","#8073ac","#542788"],
-	10: ["#7f3b08","#b35806","#e08214","#fdb863","#fee0b6","#d8daeb","#b2abd2","#8073ac","#542788","#2d004b"],
-	11: ["#7f3b08","#b35806","#e08214","#fdb863","#fee0b6","#f7f7f7","#d8daeb","#b2abd2","#8073ac","#542788","#2d004b"]
-	},BrBG: {
-	3: ["#d8b365","#f5f5f5","#5ab4ac"],
-	4: ["#a6611a","#dfc27d","#80cdc1","#018571"],
-	5: ["#a6611a","#dfc27d","#f5f5f5","#80cdc1","#018571"],
-	6: ["#8c510a","#d8b365","#f6e8c3","#c7eae5","#5ab4ac","#01665e"],
-	7: ["#8c510a","#d8b365","#f6e8c3","#f5f5f5","#c7eae5","#5ab4ac","#01665e"],
-	8: ["#8c510a","#bf812d","#dfc27d","#f6e8c3","#c7eae5","#80cdc1","#35978f","#01665e"],
-	9: ["#8c510a","#bf812d","#dfc27d","#f6e8c3","#f5f5f5","#c7eae5","#80cdc1","#35978f","#01665e"],
-	10: ["#543005","#8c510a","#bf812d","#dfc27d","#f6e8c3","#c7eae5","#80cdc1","#35978f","#01665e","#003c30"],
-	11: ["#543005","#8c510a","#bf812d","#dfc27d","#f6e8c3","#f5f5f5","#c7eae5","#80cdc1","#35978f","#01665e","#003c30"]
-	},PRGn: {
-	3: ["#af8dc3","#f7f7f7","#7fbf7b"],
-	4: ["#7b3294","#c2a5cf","#a6dba0","#008837"],
-	5: ["#7b3294","#c2a5cf","#f7f7f7","#a6dba0","#008837"],
-	6: ["#762a83","#af8dc3","#e7d4e8","#d9f0d3","#7fbf7b","#1b7837"],
-	7: ["#762a83","#af8dc3","#e7d4e8","#f7f7f7","#d9f0d3","#7fbf7b","#1b7837"],
-	8: ["#762a83","#9970ab","#c2a5cf","#e7d4e8","#d9f0d3","#a6dba0","#5aae61","#1b7837"],
-	9: ["#762a83","#9970ab","#c2a5cf","#e7d4e8","#f7f7f7","#d9f0d3","#a6dba0","#5aae61","#1b7837"],
-	10: ["#40004b","#762a83","#9970ab","#c2a5cf","#e7d4e8","#d9f0d3","#a6dba0","#5aae61","#1b7837","#00441b"],
-	11: ["#40004b","#762a83","#9970ab","#c2a5cf","#e7d4e8","#f7f7f7","#d9f0d3","#a6dba0","#5aae61","#1b7837","#00441b"]
-	},PiYG: {
-	3: ["#e9a3c9","#f7f7f7","#a1d76a"],
-	4: ["#d01c8b","#f1b6da","#b8e186","#4dac26"],
-	5: ["#d01c8b","#f1b6da","#f7f7f7","#b8e186","#4dac26"],
-	6: ["#c51b7d","#e9a3c9","#fde0ef","#e6f5d0","#a1d76a","#4d9221"],
-	7: ["#c51b7d","#e9a3c9","#fde0ef","#f7f7f7","#e6f5d0","#a1d76a","#4d9221"],
-	8: ["#c51b7d","#de77ae","#f1b6da","#fde0ef","#e6f5d0","#b8e186","#7fbc41","#4d9221"],
-	9: ["#c51b7d","#de77ae","#f1b6da","#fde0ef","#f7f7f7","#e6f5d0","#b8e186","#7fbc41","#4d9221"],
-	10: ["#8e0152","#c51b7d","#de77ae","#f1b6da","#fde0ef","#e6f5d0","#b8e186","#7fbc41","#4d9221","#276419"],
-	11: ["#8e0152","#c51b7d","#de77ae","#f1b6da","#fde0ef","#f7f7f7","#e6f5d0","#b8e186","#7fbc41","#4d9221","#276419"]
-	},RdBu: {
-	3: ["#ef8a62","#f7f7f7","#67a9cf"],
-	4: ["#ca0020","#f4a582","#92c5de","#0571b0"],
-	5: ["#ca0020","#f4a582","#f7f7f7","#92c5de","#0571b0"],
-	6: ["#b2182b","#ef8a62","#fddbc7","#d1e5f0","#67a9cf","#2166ac"],
-	7: ["#b2182b","#ef8a62","#fddbc7","#f7f7f7","#d1e5f0","#67a9cf","#2166ac"],
-	8: ["#b2182b","#d6604d","#f4a582","#fddbc7","#d1e5f0","#92c5de","#4393c3","#2166ac"],
-	9: ["#b2182b","#d6604d","#f4a582","#fddbc7","#f7f7f7","#d1e5f0","#92c5de","#4393c3","#2166ac"],
-	10: ["#67001f","#b2182b","#d6604d","#f4a582","#fddbc7","#d1e5f0","#92c5de","#4393c3","#2166ac","#053061"],
-	11: ["#67001f","#b2182b","#d6604d","#f4a582","#fddbc7","#f7f7f7","#d1e5f0","#92c5de","#4393c3","#2166ac","#053061"]
-	},RdGy: {
-	3: ["#ef8a62","#ffffff","#999999"],
-	4: ["#ca0020","#f4a582","#bababa","#404040"],
-	5: ["#ca0020","#f4a582","#ffffff","#bababa","#404040"],
-	6: ["#b2182b","#ef8a62","#fddbc7","#e0e0e0","#999999","#4d4d4d"],
-	7: ["#b2182b","#ef8a62","#fddbc7","#ffffff","#e0e0e0","#999999","#4d4d4d"],
-	8: ["#b2182b","#d6604d","#f4a582","#fddbc7","#e0e0e0","#bababa","#878787","#4d4d4d"],
-	9: ["#b2182b","#d6604d","#f4a582","#fddbc7","#ffffff","#e0e0e0","#bababa","#878787","#4d4d4d"],
-	10: ["#67001f","#b2182b","#d6604d","#f4a582","#fddbc7","#e0e0e0","#bababa","#878787","#4d4d4d","#1a1a1a"],
-	11: ["#67001f","#b2182b","#d6604d","#f4a582","#fddbc7","#ffffff","#e0e0e0","#bababa","#878787","#4d4d4d","#1a1a1a"]
-	},RdYlBu: {
-	3: ["#fc8d59","#ffffbf","#91bfdb"],
-	4: ["#d7191c","#fdae61","#abd9e9","#2c7bb6"],
-	5: ["#d7191c","#fdae61","#ffffbf","#abd9e9","#2c7bb6"],
-	6: ["#d73027","#fc8d59","#fee090","#e0f3f8","#91bfdb","#4575b4"],
-	7: ["#d73027","#fc8d59","#fee090","#ffffbf","#e0f3f8","#91bfdb","#4575b4"],
-	8: ["#d73027","#f46d43","#fdae61","#fee090","#e0f3f8","#abd9e9","#74add1","#4575b4"],
-	9: ["#d73027","#f46d43","#fdae61","#fee090","#ffffbf","#e0f3f8","#abd9e9","#74add1","#4575b4"],
-	10: ["#a50026","#d73027","#f46d43","#fdae61","#fee090","#e0f3f8","#abd9e9","#74add1","#4575b4","#313695"],
-	11: ["#a50026","#d73027","#f46d43","#fdae61","#fee090","#ffffbf","#e0f3f8","#abd9e9","#74add1","#4575b4","#313695"]
-	},Spectral: {
-	3: ["#fc8d59","#ffffbf","#99d594"],
-	4: ["#d7191c","#fdae61","#abdda4","#2b83ba"],
-	5: ["#d7191c","#fdae61","#ffffbf","#abdda4","#2b83ba"],
-	6: ["#d53e4f","#fc8d59","#fee08b","#e6f598","#99d594","#3288bd"],
-	7: ["#d53e4f","#fc8d59","#fee08b","#ffffbf","#e6f598","#99d594","#3288bd"],
-	8: ["#d53e4f","#f46d43","#fdae61","#fee08b","#e6f598","#abdda4","#66c2a5","#3288bd"],
-	9: ["#d53e4f","#f46d43","#fdae61","#fee08b","#ffffbf","#e6f598","#abdda4","#66c2a5","#3288bd"],
-	10: ["#9e0142","#d53e4f","#f46d43","#fdae61","#fee08b","#e6f598","#abdda4","#66c2a5","#3288bd","#5e4fa2"],
-	11: ["#9e0142","#d53e4f","#f46d43","#fdae61","#fee08b","#ffffbf","#e6f598","#abdda4","#66c2a5","#3288bd","#5e4fa2"]
-	},RdYlGn: {
-	3: ["#fc8d59","#ffffbf","#91cf60"],
-	4: ["#d7191c","#fdae61","#a6d96a","#1a9641"],
-	5: ["#d7191c","#fdae61","#ffffbf","#a6d96a","#1a9641"],
-	6: ["#d73027","#fc8d59","#fee08b","#d9ef8b","#91cf60","#1a9850"],
-	7: ["#d73027","#fc8d59","#fee08b","#ffffbf","#d9ef8b","#91cf60","#1a9850"],
-	8: ["#d73027","#f46d43","#fdae61","#fee08b","#d9ef8b","#a6d96a","#66bd63","#1a9850"],
-	9: ["#d73027","#f46d43","#fdae61","#fee08b","#ffffbf","#d9ef8b","#a6d96a","#66bd63","#1a9850"],
-	10: ["#a50026","#d73027","#f46d43","#fdae61","#fee08b","#d9ef8b","#a6d96a","#66bd63","#1a9850","#006837"],
-	11: ["#a50026","#d73027","#f46d43","#fdae61","#fee08b","#ffffbf","#d9ef8b","#a6d96a","#66bd63","#1a9850","#006837"]
-	},Accent: {
-	3: ["#7fc97f","#beaed4","#fdc086"],
-	4: ["#7fc97f","#beaed4","#fdc086","#ffff99"],
-	5: ["#7fc97f","#beaed4","#fdc086","#ffff99","#386cb0"],
-	6: ["#7fc97f","#beaed4","#fdc086","#ffff99","#386cb0","#f0027f"],
-	7: ["#7fc97f","#beaed4","#fdc086","#ffff99","#386cb0","#f0027f","#bf5b17"],
-	8: ["#7fc97f","#beaed4","#fdc086","#ffff99","#386cb0","#f0027f","#bf5b17","#666666"]
-	},Dark2: {
-	3: ["#1b9e77","#d95f02","#7570b3"],
-	4: ["#1b9e77","#d95f02","#7570b3","#e7298a"],
-	5: ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e"],
-	6: ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02"],
-	7: ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#a6761d"],
-	8: ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e","#e6ab02","#a6761d","#666666"]
-	},Paired: {
-	3: ["#a6cee3","#1f78b4","#b2df8a"],
-	4: ["#a6cee3","#1f78b4","#b2df8a","#33a02c"],
-	5: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99"],
-	6: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c"],
-	7: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f"],
-	8: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00"],
-	9: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6"],
-	10: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6","#6a3d9a"],
-	11: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6","#6a3d9a","#ffff99"],
-	12: ["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6","#6a3d9a","#ffff99","#b15928"]
-	},Pastel1: {
-	3: ["#fbb4ae","#b3cde3","#ccebc5"],
-	4: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4"],
-	5: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6"],
-	6: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc"],
-	7: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc","#e5d8bd"],
-	8: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc","#e5d8bd","#fddaec"],
-	9: ["#fbb4ae","#b3cde3","#ccebc5","#decbe4","#fed9a6","#ffffcc","#e5d8bd","#fddaec","#f2f2f2"]
-	},Pastel2: {
-	3: ["#b3e2cd","#fdcdac","#cbd5e8"],
-	4: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4"],
-	5: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9"],
-	6: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9","#fff2ae"],
-	7: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9","#fff2ae","#f1e2cc"],
-	8: ["#b3e2cd","#fdcdac","#cbd5e8","#f4cae4","#e6f5c9","#fff2ae","#f1e2cc","#cccccc"]
-	},Set1: {
-	3: ["#e41a1c","#377eb8","#4daf4a"],
-	4: ["#e41a1c","#377eb8","#4daf4a","#984ea3"],
-	5: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00"],
-	6: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33"],
-	7: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33","#a65628"],
-	8: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33","#a65628","#f781bf"],
-	9: ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#ffff33","#a65628","#f781bf","#999999"]
-	},Set2: {
-	3: ["#66c2a5","#fc8d62","#8da0cb"],
-	4: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3"],
-	5: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854"],
-	6: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f"],
-	7: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f","#e5c494"],
-	8: ["#66c2a5","#fc8d62","#8da0cb","#e78ac3","#a6d854","#ffd92f","#e5c494","#b3b3b3"]
-	},Set3: {
-	3: ["#8dd3c7","#ffffb3","#bebada"],
-	4: ["#8dd3c7","#ffffb3","#bebada","#fb8072"],
-	5: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3"],
-	6: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462"],
-	7: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69"],
-	8: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5"],
-	9: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9"],
-	10: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd"],
-	11: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd","#ccebc5"],
-	12: ["#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd","#ccebc5","#ffed6f"]
-	}};
-	
-	if (true) {
-	    !(__WEBPACK_AMD_DEFINE_FACTORY__ = (colorbrewer), __WEBPACK_AMD_DEFINE_RESULT__ = (typeof __WEBPACK_AMD_DEFINE_FACTORY__ === 'function' ? (__WEBPACK_AMD_DEFINE_FACTORY__.call(exports, __webpack_require__, exports, module)) : __WEBPACK_AMD_DEFINE_FACTORY__), __WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
-	} else if (typeof module === "object" && module.exports) {
-	    module.exports = colorbrewer;
-	} else {
-	    this.colorbrewer = colorbrewer;
-	}
-	
-	}();
-
 
 /***/ }
 /******/ ])

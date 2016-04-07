@@ -1,4 +1,5 @@
 import { heatmap } from '../../src/ndarray-heatmap';
+import colorbrewer from 'colorbrewer';
 import pack from 'ndarray-pack';
 import unpack from 'ndarray-unpack';
 
@@ -43,7 +44,7 @@ describe('heatmap', () => {
 
   it('should provide colorRange accessor', () => {
     // default value
-    expect(hm.colorRange()).to.deep.equal(['#000000', '#FFFFFF']);
+    expect(hm.colorRange()).to.deep.equal(colorbrewer.YlGnBu[5]);
 
     // setter and getter
     expect(hm.colorRange(['#FF0000', '#00FFFF'])).to.equal(hm);

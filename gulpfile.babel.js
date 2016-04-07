@@ -116,6 +116,10 @@ function watch() {
   gulp.watch(watchFiles, ['test']);
 }
 
+function watchBuild() {
+  gulp.watch(watchFiles, ['build','test']);
+}
+
 function testBrowser() {
   // Our testing bundle is made up of our unit tests, which
   // should individually load up pieces of our application.
@@ -194,6 +198,7 @@ gulp.task('test-browser', ['lint', 'clean-tmp'], testBrowser);
 
 // Run the headless unit tests as you make changes.
 gulp.task('watch', watch);
+gulp.task('watch-build', watchBuild);
 
 // An alias of test
 gulp.task('default', ['test']);
