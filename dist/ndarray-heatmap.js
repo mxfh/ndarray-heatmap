@@ -2070,6 +2070,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	var LinearGradient = function LinearGradient(obj, options) {
 	  this.segments = setWidths((0, _linearGradientParser.parseGradientObject)(_.cloneDeep(obj)));
+	  options = options || {};
 	  this.name = options.name || obj.name;
 	  this.selected = options.selected || obj.selected;
 	  this.optimize = options.optimize || obj.optimize;
