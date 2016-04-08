@@ -178,6 +178,7 @@ function calculateStepSizes(gradient, steps) {
 }
 
 function makeColorScale(range, steps, options) {
+  options = options || {};
   var gradient = new LinearGradient(range, options);
   if (!gradient.segments) {return false;}
   gradient = collectNormalizedRanges(gradient, steps);
