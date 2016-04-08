@@ -56,7 +56,9 @@ function heatmap() {
     let buf32 = new Uint32Array(buf);
 
     let [min, max] = domain || extent(data.data);
+
     let colors = makeColorScale(colorRange, colorSteps, options);
+    if (!colors) {return false};
     let colorTable = buildColorTable(colors);
 
     renderToCanvas(data, buf32, colorTable, min, max, canvas.width);
