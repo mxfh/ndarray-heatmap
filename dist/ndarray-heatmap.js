@@ -2052,42 +2052,84 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	var _d3Scale = __webpack_require__(16);
 	
-	var _d3Color = __webpack_require__(23);
+	var _d3Color = __webpack_require__(15);
+	
+	var _bigRational = __webpack_require__(21);
+	
+	var _bigRational2 = _interopRequireDefault(_bigRational);
+	
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+	
+	var HARDSTEPLIMIT = 65535;
 	
 	var LinearGradient = function LinearGradient(obj, options) {
-	  this.scale = parseGradientObject(obj);
+	  this.colors = parseGradientObject(obj);
 	  this.name = options.name || obj.name;
+	  this.selected = options.selected || obj.selected || false;
+	  this.optimize = options.optimize || obj.optimize || false;
 	};
 	
 	function parseGradientObject(obj) {
 	  // normalize
-	  if (obj.hasOwnProperty('color')) {
-	    obj.scale = color;
-	  }
-	  if (obj.hasOwnProperty('scale')) {
-	    if (obj.scale.hasOwnProperty('color')) {
-	      obj.scale = [color];
-	    }
-	    obj.scale.forEach(function (segment, i) {
-	      if (!segment.hasOwnProperty('width')) {
-	        obj.scale[i].width = NaN;
-	      }
-	      if (segment.hasOwnProperty('color')) {
-	        // pad single colors to full width
-	        var _color = segment.color;
-	        if (Array.isArray(_color) && _color.length === 1) {
-	          obj.scale[i].color.push(_color[0]);
-	        }
-	        if (typeof _color === 'string') {
-	          obj.scale[i].color = [_color, _color];
+	  if (Array.isArray(obj)) {
+	    var colors = obj.slice();
+	    var collecting = [];
+	    obj = {
+	      colors: [],
+	      width: NaN
+	    };
+	    // collect strings and arrays as arrays;
+	    colors.forEach(function (m) {
+	      if (typeof m === 'string') {
+	        collecting.push(m);
+	      } else if (Array.isArray(m)) {
+	        if (collecting.length > 0) obj.colors.push({ color: collecting });
+	        collecting = [];
+	        var last = m.slice().pop();
+	        if (typeof last === 'number') {
+	          var w = m.pop();
+	          obj.colors.push({
+	            color: m,
+	            width: w
+	          });
+	        } else {
+	          obj.colors.push({ color: m });
 	        }
 	      }
 	    });
-	    obj.scale = setWidths(obj.scale);
+	    if (collecting.length > 0) obj.colors.push({ color: collecting });
 	  }
-	  return obj;
-	}
 	
+	  if (obj.hasOwnProperty('color')) {
+	    obj.colors = [{
+	      color: obj.color,
+	      width: obj.width || NaN
+	    }];
+	    delete obj.color;
+	  }
+	  if (obj.hasOwnProperty('colors')) {
+	    if (obj.colors.hasOwnProperty('color')) {
+	      obj.colors = [obj.colors];
+	    }
+	    obj.colors.forEach(function (colorObj, i) {
+	      if (!colorObj.hasOwnProperty('width')) {
+	        obj.colors[i].width = NaN;
+	      }
+	      if (colorObj.hasOwnProperty('color')) {
+	        // pad single colors to full width
+	        var color = colorObj.color;
+	        if (Array.isArray(color) && color.length === 1 && typeof color[0] === 'string') {
+	          obj.colors[i].color.push(color[0]);
+	        }
+	        if (typeof color === 'string') {
+	          obj.colors[i].color = [color, color];
+	        }
+	      }
+	    });
+	    obj.colors = setWidths(obj.colors);
+	  }
+	  return obj.colors;
+	}
 	function setWidths(scale) {
 	  return distributeUndeclaredWidths(collectDeclaredWidths(scale));
 	}
@@ -2097,7 +2139,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  var count = 0;
 	  scale.forEach(function (r, i) {
 	    if (!isNaN(r.width)) {
-	      sum += color.widths[i];
+	      sum += r.width;
 	      count += 1;
 	    }
 	  });
@@ -2111,19 +2153,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	function distributeUndeclaredWidths(o) {
 	  var scale = o.scale;
 	  var l = scale.length - o.count;
-	  var remainder = 1 - o.sum;
-	  var lastRemainder, lastUndeclared;
-	  var width = remainder / l;
+	  var width = (1 - o.sum) / l;
 	  scale.forEach(function (r, i) {
-	    if (isNaN(r)) {
-	      lastRemainder = remainder;
-	      lastUndeclared = scale[i];
-	      remainder -= width;
+	    if (isNaN(r.width)) {
 	      scale[i].width = width;
 	    }
 	  });
 	  return scale;
 	}
+	
 	function fillColorScale(range, steps) {
 	  if (range.length >= 2) {
 	    var colors = [];
@@ -2141,22 +2179,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	  } else {
 	    return false;
 	  }
-	}
-	
-	function collectStrings(arr) {
-	  var arrOfArr = [];
-	  var current = [];
-	  arr.forEach(function (r) {
-	    if (Array.isArray(r)) {
-	      if (current.length > 0) arrOfArr.push(current);
-	      current = [];
-	      arrOfArr.push(r);
-	    } else if (typeof r === 'string') {
-	      current.push(r);
-	    }
-	  });
-	  if (current.length > 0) arrOfArr.push(current);
-	  return arrOfArr;
 	}
 	
 	function dropNarrowRanges(normalized) {
@@ -2203,70 +2225,112 @@ return /******/ (function(modules) { // webpackBootstrap
 	  return normalized;
 	}
 	
-	function collectNormalizedRanges(gradient, steps) {
+	function ggt(m, n) {
+	  if (n == 0) return m;else return ggt(n, m % n);
+	}
+	
+	function kgv(m, n) {
+	  o = ggt(m, n);
+	  p = m * n / o;
+	  return p;
+	}
+	
+	function rationalize(rational, epsilon) {
+	  var denominator = 0;
+	  var numerator;
+	  var error;
+	
+	  do {
+	    denominator++;
+	    numerator = Math.round(rational.numerator * denominator / rational.denominator);
+	    error = Math.abs(rational.minus(numerator / denominator));
+	  } while (error > epsilon);
+	  return (0, _bigRational2.default)(numerator, denominator);
+	}
+	
+	function calculateStepSizes(gradient, steps) {
+	  steps = Math.min(steps, HARDSTEPLIMIT);
 	  var sum = 0;
 	  var totalSteps = 0;
-	  var tmp;
-	  var threshold = 0.00001;
-	  var equalRanges = true;
-	  var range = gradient.scale;
-	  range.forEach(function (a) {
-	    sum += a[1];
-	    totalSteps += a[0].length;
-	    if (equalRanges && tmp !== undefined && Math.abs(a[1] - tmp) > threshold) {
-	      equalRanges = false;
+	  var totalIntSteps = 0;
+	  var rescale = 1;
+	  var sharedDivider = undefined;
+	  gradient.colors.forEach(function (colorObj, i) {
+	    var s = colorObj.width * steps;
+	    var l = colorObj.color.length;
+	    var fs = s / l;
+	    gradient.colors[i].steps = s;
+	    if (l === 2 && colorObj.color[0] === colorObj.color[1]) {
+	      gradient.colors[i].finesteps = s;
+	      gradient.colors[i].finewidth = colorObj.width;
+	      gradient.colors[i].isFlat = true;
+	    } else {
+	      gradient.colors[i].finesteps = fs;
+	      gradient.colors[i].finewidth = colorObj.width / colorObj.color.length;
 	    }
-	    tmp = a[1];
+	    fs = gradient.colors[i].finesteps;
+	    if (gradient.optimalBaseStepCount === undefined && gradient.optimize) {
+	      var rat = rationalize((0, _bigRational2.default)(fs), 1 / (gradient.colors[i].finewidth * HARDSTEPLIMIT));
+	      var int = fs * rat.denom.value;
+	      gradient.colors[i].minIntSteps = int;
+	      totalIntSteps += int;
+	      if (sharedDivider === undefined) {
+	        sharedDivider = int;
+	      } else {
+	        sharedDivider = ggt(sharedDivider, int);
+	      }
+	    }
+	    if (gradient.colors[i].finesteps < 1) {
+	      rescale = Math.max(rescale, 1 / gradient.colors[i].finesteps);
+	    }
+	    sum += s;
+	    totalSteps += fs;
 	  });
-	  if (sum !== 1) {
-	    console.warn('sum of range widths does not equal 1', sum, range);
+	  if (gradient.optimalBaseStepCount === undefined && gradient.optimize) {
+	    gradient.optimalBaseStepCount = totalIntSteps / sharedDivider;
+	    gradient = calculateStepSizes(gradient, gradient.optimalBaseStepCount);
 	  }
 	
-	  if (totalSteps > steps && equalRanges) {
-	    console.warn(steps, 'too few steps requested, increasing to', totalSteps);
-	    steps = totalSteps;
+	  if (rescale > 1 && steps < HARDSTEPLIMIT) {
+	    steps = Math.min(rescale * steps, HARDSTEPLIMIT);
+	    console.info('increasing step count to', steps);
+	    gradient = calculateStepSizes(gradient, steps);
 	  }
-	  var normalized = {
-	    range: range,
-	    steps: steps
-	  };
-	  gradient.steps = steps;
-	  gradient.normalized = dropNarrowRanges(normalized);
+	  return gradient;
+	}
+	
+	function collectNormalizedRanges(gradient, steps) {
+	  gradient = calculateStepSizes(gradient, steps);
+	  //gradient.normalized = dropNarrowRanges(normalized);
 	  return gradient;
 	}
 	
 	function makeColorScale(range, steps, options) {
 	  var gradient = new LinearGradient(range, options);
-	  //console.log(gradient);
-	
 	  gradient = collectNormalizedRanges(gradient, steps);
-	  if (options.selected) console.log(gradient);
-	  /*
-	  steps = gradient.normalized.steps;
-	  range = gradient.normalized.range;
+	  if (gradient.selected) console.log(gradient);
+	  var colors = gradient.colors;
 	  var fullSteps;
-	  let stepsAvailable = steps;
+	  steps = gradient.optimalBaseStepCount || steps;
+	  var stepsAvailable = steps;
 	  var usedSteps = 0;
+	  gradient.colorSteps = [];
 	  var availableRange = 1;
-	  var colors = [];
-	  range.forEach(function (scale) {
-	    fullSteps = Math.round(stepsAvailable * (scale[1]) / availableRange);
-	    availableRange -= scale[1];
-	    if (fullSteps > 1 && stepsAvailable >= 2) {
+	  colors.forEach(function (colorObj) {
+	    fullSteps = Math.round(stepsAvailable * colorObj.width / availableRange);
+	    availableRange -= colorObj.width;
+	    if (fullSteps >= 1 && stepsAvailable >= 1) {
 	      stepsAvailable -= fullSteps;
 	      usedSteps += fullSteps;
-	      colors = colors.concat(fillColorScale(scale[0], fullSteps));
+	      gradient.colorSteps = gradient.colorSteps.concat(fillColorScale(colorObj.color, fullSteps));
 	    } else {
-	      console.info('dropped range', scale);
+	      console.info('dropped range', colorObj);
 	    }
 	  });
 	  if (usedSteps !== steps) {
-	    console.error(
-	      'calculated color steps dont match up', usedSteps, steps, range, colors
-	    );
+	    console.error('calculated color steps dont match up', usedSteps, steps, colors);
 	  }
-	  */
-	  return gradient;
+	  return gradient.colorSteps;
 	}
 	
 	exports.makeColorScale = makeColorScale;
@@ -3313,7 +3377,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
-	   true ? factory(exports, __webpack_require__(10), __webpack_require__(17), __webpack_require__(18), __webpack_require__(20), __webpack_require__(21), __webpack_require__(22), __webpack_require__(19)) :
+	   true ? factory(exports, __webpack_require__(10), __webpack_require__(17), __webpack_require__(14), __webpack_require__(18), __webpack_require__(19), __webpack_require__(20), __webpack_require__(15)) :
 	  typeof define === 'function' && define.amd ? define(['exports', 'd3-array', 'd3-collection', 'd3-interpolate', 'd3-format', 'd3-time', 'd3-time-format', 'd3-color'], factory) :
 	  (factory((global.d3_scale = global.d3_scale || {}),global.d3_array,global.d3_collection,global.d3_interpolate,global.d3_format,global.d3_time,global.d3_time_format,global.d3_color));
 	}(this, function (exports,d3Array,d3Collection,d3Interpolate,d3Format,d3Time,d3TimeFormat,d3Color) { 'use strict';
@@ -4476,1043 +4540,6 @@ return /******/ (function(modules) { // webpackBootstrap
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
-	   true ? factory(exports, __webpack_require__(19)) :
-	  typeof define === 'function' && define.amd ? define(['exports', 'd3-color'], factory) :
-	  (factory((global.d3_interpolate = global.d3_interpolate || {}),global.d3_color));
-	}(this, function (exports,d3Color) { 'use strict';
-	
-	  function constant(x) {
-	    return function() {
-	      return x;
-	    };
-	  }
-	
-	  function linear(a, d) {
-	    return function(t) {
-	      return a + t * d;
-	    };
-	  }
-	
-	  function exponential(a, b, y) {
-	    return a = Math.pow(a, y), b = Math.pow(b, y) - a, y = 1 / y, function(t) {
-	      return Math.pow(a + t * b, y);
-	    };
-	  }
-	
-	  function interpolateHue(a, b) {
-	    var d = b - a;
-	    return d ? linear(a, d > 180 || d < -180 ? d - 360 * Math.round(d / 360) : d) : constant(isNaN(a) ? b : a);
-	  }
-	
-	  function gamma(y) {
-	    return (y = +y) === 1 ? nogamma : function(a, b) {
-	      return b - a ? exponential(a, b, y) : constant(isNaN(a) ? b : a);
-	    };
-	  }
-	
-	  function nogamma(a, b) {
-	    var d = b - a;
-	    return d ? linear(a, d) : constant(isNaN(a) ? b : a);
-	  }
-	
-	  var rgb$1 = (function gamma$$(y) {
-	    var interpolateColor = gamma(y);
-	
-	    function interpolateRgb(start, end) {
-	      var r = interpolateColor((start = d3Color.rgb(start)).r, (end = d3Color.rgb(end)).r),
-	          g = interpolateColor(start.g, end.g),
-	          b = interpolateColor(start.b, end.b),
-	          opacity = interpolateColor(start.opacity, end.opacity);
-	      return function(t) {
-	        start.r = r(t);
-	        start.g = g(t);
-	        start.b = b(t);
-	        start.opacity = opacity(t);
-	        return start + "";
-	      };
-	    }
-	
-	    interpolateRgb.gamma = gamma$$;
-	
-	    return interpolateRgb;
-	  })(1);
-	
-	  // TODO sparse arrays?
-	  function array(a, b) {
-	    var x = [],
-	        c = [],
-	        na = a ? a.length : 0,
-	        nb = b ? b.length : 0,
-	        n0 = Math.min(na, nb),
-	        i;
-	
-	    for (i = 0; i < n0; ++i) x.push(value(a[i], b[i]));
-	    for (; i < na; ++i) c[i] = a[i];
-	    for (; i < nb; ++i) c[i] = b[i];
-	
-	    return function(t) {
-	      for (i = 0; i < n0; ++i) c[i] = x[i](t);
-	      return c;
-	    };
-	  }
-	
-	  function number(a, b) {
-	    return a = +a, b -= a, function(t) {
-	      return a + b * t;
-	    };
-	  }
-	
-	  function object(a, b) {
-	    var i = {},
-	        c = {},
-	        k;
-	
-	    if (a === null || typeof a !== "object") a = {};
-	    if (b === null || typeof b !== "object") b = {};
-	
-	    for (k in a) {
-	      if (k in b) {
-	        i[k] = value(a[k], b[k]);
-	      } else {
-	        c[k] = a[k];
-	      }
-	    }
-	
-	    for (k in b) {
-	      if (!(k in a)) {
-	        c[k] = b[k];
-	      }
-	    }
-	
-	    return function(t) {
-	      for (k in i) c[k] = i[k](t);
-	      return c;
-	    };
-	  }
-	
-	  var reA = /[-+]?(?:\d+\.?\d*|\.?\d+)(?:[eE][-+]?\d+)?/g;
-	  var reB = new RegExp(reA.source, "g");
-	  function zero(b) {
-	    return function() {
-	      return b;
-	    };
-	  }
-	
-	  function one(b) {
-	    return function(t) {
-	      return b(t) + "";
-	    };
-	  }
-	
-	  function string(a, b) {
-	    var bi = reA.lastIndex = reB.lastIndex = 0, // scan index for next number in b
-	        am, // current match in a
-	        bm, // current match in b
-	        bs, // string preceding current number in b, if any
-	        i = -1, // index in s
-	        s = [], // string constants and placeholders
-	        q = []; // number interpolators
-	
-	    // Coerce inputs to strings.
-	    a = a + "", b = b + "";
-	
-	    // Interpolate pairs of numbers in a & b.
-	    while ((am = reA.exec(a))
-	        && (bm = reB.exec(b))) {
-	      if ((bs = bm.index) > bi) { // a string precedes the next number in b
-	        bs = b.slice(bi, bs);
-	        if (s[i]) s[i] += bs; // coalesce with previous string
-	        else s[++i] = bs;
-	      }
-	      if ((am = am[0]) === (bm = bm[0])) { // numbers in a & b match
-	        if (s[i]) s[i] += bm; // coalesce with previous string
-	        else s[++i] = bm;
-	      } else { // interpolate non-matching numbers
-	        s[++i] = null;
-	        q.push({i: i, x: number(am, bm)});
-	      }
-	      bi = reB.lastIndex;
-	    }
-	
-	    // Add remains of b.
-	    if (bi < b.length) {
-	      bs = b.slice(bi);
-	      if (s[i]) s[i] += bs; // coalesce with previous string
-	      else s[++i] = bs;
-	    }
-	
-	    // Special optimization for only a single match.
-	    // Otherwise, interpolate each of the numbers and rejoin the string.
-	    return s.length < 2 ? (q[0]
-	        ? one(q[0].x)
-	        : zero(b))
-	        : (b = q.length, function(t) {
-	            for (var i = 0, o; i < b; ++i) s[(o = q[i]).i] = o.x(t);
-	            return s.join("");
-	          });
-	  }
-	
-	  function value(a, b) {
-	    var t = typeof b, c;
-	    return b == null || t === "boolean" ? constant(b)
-	        : (t === "number" ? number
-	        : t === "string" ? ((c = d3Color.color(b)) ? (b = c, rgb$1) : string)
-	        : b instanceof d3Color.color ? rgb$1
-	        : Array.isArray(b) ? array
-	        : object)(a, b);
-	  }
-	
-	  function round(a, b) {
-	    return a = +a, b -= a, function(t) {
-	      return Math.round(a + b * t);
-	    };
-	  }
-	
-	  var rad2deg = 180 / Math.PI;
-	
-	  var identity = {
-	    translateX: 0,
-	    translateY: 0,
-	    rotate: 0,
-	    skewX: 0,
-	    scaleX: 1,
-	    scaleY: 1
-	  };
-	
-	  function decompose(a, b, c, d, e, f) {
-	    if (a * d === b * c) return null;
-	
-	    var scaleX = Math.sqrt(a * a + b * b);
-	    a /= scaleX, b /= scaleX;
-	
-	    var skewX = a * c + b * d;
-	    c -= a * skewX, d -= b * skewX;
-	
-	    var scaleY = Math.sqrt(c * c + d * d);
-	    c /= scaleY, d /= scaleY, skewX /= scaleY;
-	
-	    if (a * d < b * c) a = -a, b = -b, skewX = -skewX, scaleX = -scaleX;
-	
-	    return {
-	      translateX: e,
-	      translateY: f,
-	      rotate: Math.atan2(b, a) * rad2deg,
-	      skewX: Math.atan(skewX) * rad2deg,
-	      scaleX: scaleX,
-	      scaleY: scaleY
-	    };
-	  }
-	
-	  var cssNode;
-	  var cssRoot;
-	  var cssView;
-	  var svgNode;
-	  function parseCss(value) {
-	    if (value === "none") return identity;
-	    if (!cssNode) cssNode = document.createElement("DIV"), cssRoot = document.documentElement, cssView = document.defaultView;
-	    cssNode.style.transform = value;
-	    value = cssView.getComputedStyle(cssRoot.appendChild(cssNode), null).getPropertyValue("transform");
-	    cssRoot.removeChild(cssNode);
-	    var m = value.slice(7, -1).split(",");
-	    return decompose(+m[0], +m[1], +m[2], +m[3], +m[4], +m[5]);
-	  }
-	
-	  function parseSvg(value) {
-	    if (!svgNode) svgNode = document.createElementNS("http://www.w3.org/2000/svg", "g");
-	    svgNode.setAttribute("transform", value == null ? "" : value);
-	    var m = svgNode.transform.baseVal.consolidate().matrix;
-	    return decompose(m.a, m.b, m.c, m.d, m.e, m.f);
-	  }
-	
-	  function interpolateTransform(parse, pxComma, pxParen, degParen) {
-	
-	    function pop(s) {
-	      return s.length ? s.pop() + " " : "";
-	    }
-	
-	    function translate(xa, ya, xb, yb, s, q) {
-	      if (xa !== xb || ya !== yb) {
-	        var i = s.push("translate(", null, pxComma, null, pxParen);
-	        q.push({i: i - 4, x: number(xa, xb)}, {i: i - 2, x: number(ya, yb)});
-	      } else if (xb || yb) {
-	        s.push("translate(" + xb + pxComma + yb + pxParen);
-	      }
-	    }
-	
-	    function rotate(a, b, s, q) {
-	      if (a !== b) {
-	        if (a - b > 180) b += 360; else if (b - a > 180) a += 360; // shortest path
-	        q.push({i: s.push(pop(s) + "rotate(", null, degParen) - 2, x: number(a, b)});
-	      } else if (b) {
-	        s.push(pop(s) + "rotate(" + b + degParen);
-	      }
-	    }
-	
-	    function skewX(a, b, s, q) {
-	      if (a !== b) {
-	        q.push({i: s.push(pop(s) + "skewX(", null, degParen) - 2, x: number(a, b)});
-	      } else if (b) {
-	        s.push(pop(s) + "skewX(" + b + degParen);
-	      }
-	    }
-	
-	    function scale(xa, ya, xb, yb, s, q) {
-	      if (xa !== xb || ya !== yb) {
-	        var i = s.push(pop(s) + "scale(", null, ",", null, ")");
-	        q.push({i: i - 4, x: number(xa, xb)}, {i: i - 2, x: number(ya, yb)});
-	      } else if (xb !== 1 || yb !== 1) {
-	        s.push(pop(s) + "scale(" + xb + "," + yb + ")");
-	      }
-	    }
-	
-	    return function(a, b) {
-	      var s = [], // string constants and placeholders
-	          q = []; // number interpolators
-	      a = parse(a), b = parse(b);
-	      translate(a.translateX, a.translateY, b.translateX, b.translateY, s, q);
-	      rotate(a.rotate, b.rotate, s, q);
-	      skewX(a.skewX, b.skewX, s, q);
-	      scale(a.scaleX, a.scaleY, b.scaleX, b.scaleY, s, q);
-	      a = b = null; // gc
-	      return function(t) {
-	        var i = -1, n = q.length, o;
-	        while (++i < n) s[(o = q[i]).i] = o.x(t);
-	        return s.join("");
-	      };
-	    };
-	  }
-	
-	  var interpolateTransformCss = interpolateTransform(parseCss, "px, ", "px)", "deg)");
-	  var interpolateTransformSvg = interpolateTransform(parseSvg, ", ", ")", ")");
-	
-	  var rho = Math.SQRT2;
-	  var rho2 = 2;
-	  var rho4 = 4;
-	  var epsilon2 = 1e-12;
-	  function cosh(x) {
-	    return ((x = Math.exp(x)) + 1 / x) / 2;
-	  }
-	
-	  function sinh(x) {
-	    return ((x = Math.exp(x)) - 1 / x) / 2;
-	  }
-	
-	  function tanh(x) {
-	    return ((x = Math.exp(2 * x)) - 1) / (x + 1);
-	  }
-	
-	  // p0 = [ux0, uy0, w0]
-	  // p1 = [ux1, uy1, w1]
-	  function zoom(p0, p1) {
-	    var ux0 = p0[0], uy0 = p0[1], w0 = p0[2],
-	        ux1 = p1[0], uy1 = p1[1], w1 = p1[2],
-	        dx = ux1 - ux0,
-	        dy = uy1 - uy0,
-	        d2 = dx * dx + dy * dy,
-	        i,
-	        S;
-	
-	    // Special case for u0 ≅ u1.
-	    if (d2 < epsilon2) {
-	      S = Math.log(w1 / w0) / rho;
-	      i = function(t) {
-	        return [
-	          ux0 + t * dx,
-	          uy0 + t * dy,
-	          w0 * Math.exp(rho * t * S)
-	        ];
-	      }
-	    }
-	
-	    // General case.
-	    else {
-	      var d1 = Math.sqrt(d2),
-	          b0 = (w1 * w1 - w0 * w0 + rho4 * d2) / (2 * w0 * rho2 * d1),
-	          b1 = (w1 * w1 - w0 * w0 - rho4 * d2) / (2 * w1 * rho2 * d1),
-	          r0 = Math.log(Math.sqrt(b0 * b0 + 1) - b0),
-	          r1 = Math.log(Math.sqrt(b1 * b1 + 1) - b1);
-	      S = (r1 - r0) / rho;
-	      i = function(t) {
-	        var s = t * S,
-	            coshr0 = cosh(r0),
-	            u = w0 / (rho2 * d1) * (coshr0 * tanh(rho * s + r0) - sinh(r0));
-	        return [
-	          ux0 + u * dx,
-	          uy0 + u * dy,
-	          w0 * coshr0 / cosh(rho * s + r0)
-	        ];
-	      }
-	    }
-	
-	    i.duration = S * 1000;
-	
-	    return i;
-	  }
-	
-	  function interpolateHsl(start, end) {
-	    var h = interpolateHue((start = d3Color.hsl(start)).h, (end = d3Color.hsl(end)).h),
-	        s = nogamma(start.s, end.s),
-	        l = nogamma(start.l, end.l),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.h = h(t);
-	      start.s = s(t);
-	      start.l = l(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  function interpolateHslLong(start, end) {
-	    var h = nogamma((start = d3Color.hsl(start)).h, (end = d3Color.hsl(end)).h),
-	        s = nogamma(start.s, end.s),
-	        l = nogamma(start.l, end.l),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.h = h(t);
-	      start.s = s(t);
-	      start.l = l(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  function interpolateLab(start, end) {
-	    var l = nogamma((start = d3Color.lab(start)).l, (end = d3Color.lab(end)).l),
-	        a = nogamma(start.a, end.a),
-	        b = nogamma(start.b, end.b),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.l = l(t);
-	      start.a = a(t);
-	      start.b = b(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  function interpolateHcl(start, end) {
-	    var h = interpolateHue((start = d3Color.hcl(start)).h, (end = d3Color.hcl(end)).h),
-	        c = nogamma(start.c, end.c),
-	        l = nogamma(start.l, end.l),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.h = h(t);
-	      start.c = c(t);
-	      start.l = l(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  function interpolateHclLong(start, end) {
-	    var h = nogamma((start = d3Color.hcl(start)).h, (end = d3Color.hcl(end)).h),
-	        c = nogamma(start.c, end.c),
-	        l = nogamma(start.l, end.l),
-	        opacity = nogamma(start.opacity, end.opacity);
-	    return function(t) {
-	      start.h = h(t);
-	      start.c = c(t);
-	      start.l = l(t);
-	      start.opacity = opacity(t);
-	      return start + "";
-	    };
-	  }
-	
-	  var cubehelix$1 = (function gamma(y) {
-	    y = +y;
-	
-	    function interpolateCubehelix(start, end) {
-	      var h = interpolateHue((start = d3Color.cubehelix(start)).h, (end = d3Color.cubehelix(end)).h),
-	          s = nogamma(start.s, end.s),
-	          l = nogamma(start.l, end.l),
-	          opacity = nogamma(start.opacity, end.opacity);
-	      return function(t) {
-	        start.h = h(t);
-	        start.s = s(t);
-	        start.l = l(Math.pow(t, y));
-	        start.opacity = opacity(t);
-	        return start + "";
-	      };
-	    }
-	
-	    interpolateCubehelix.gamma = gamma;
-	
-	    return interpolateCubehelix;
-	  })(1);
-	
-	  var cubehelixLong = (function gamma(y) {
-	    y = +y;
-	
-	    function interpolateCubehelixLong(start, end) {
-	      var h = nogamma((start = d3Color.cubehelix(start)).h, (end = d3Color.cubehelix(end)).h),
-	          s = nogamma(start.s, end.s),
-	          l = nogamma(start.l, end.l),
-	          opacity = nogamma(start.opacity, end.opacity);
-	      return function(t) {
-	        start.h = h(t);
-	        start.s = s(t);
-	        start.l = l(Math.pow(t, y));
-	        start.opacity = opacity(t);
-	        return start + "";
-	      };
-	    }
-	
-	    interpolateCubehelixLong.gamma = gamma;
-	
-	    return interpolateCubehelixLong;
-	  })(1);
-	
-	  var version = "0.7.0";
-	
-	  exports.version = version;
-	  exports.interpolate = value;
-	  exports.interpolateArray = array;
-	  exports.interpolateNumber = number;
-	  exports.interpolateObject = object;
-	  exports.interpolateRound = round;
-	  exports.interpolateString = string;
-	  exports.interpolateTransformCss = interpolateTransformCss;
-	  exports.interpolateTransformSvg = interpolateTransformSvg;
-	  exports.interpolateZoom = zoom;
-	  exports.interpolateRgb = rgb$1;
-	  exports.interpolateHsl = interpolateHsl;
-	  exports.interpolateHslLong = interpolateHslLong;
-	  exports.interpolateLab = interpolateLab;
-	  exports.interpolateHcl = interpolateHcl;
-	  exports.interpolateHclLong = interpolateHclLong;
-	  exports.interpolateCubehelix = cubehelix$1;
-	  exports.interpolateCubehelixLong = cubehelixLong;
-	
-	}));
-
-/***/ },
-/* 19 */
-/***/ function(module, exports, __webpack_require__) {
-
-	(function (global, factory) {
-	   true ? factory(exports) :
-	  typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	  (factory((global.d3_color = global.d3_color || {})));
-	}(this, function (exports) { 'use strict';
-	
-	  function define(constructor, factory, prototype) {
-	    constructor.prototype = factory.prototype = prototype;
-	    prototype.constructor = constructor;
-	  }
-	
-	  function extend(parent, definition) {
-	    var prototype = Object.create(parent.prototype);
-	    for (var key in definition) prototype[key] = definition[key];
-	    return prototype;
-	  }
-	
-	  function Color() {}
-	
-	  var darker = 0.7;
-	  var brighter = 1 / darker;
-	
-	  var reHex3 = /^#([0-9a-f]{3})$/;
-	  var reHex6 = /^#([0-9a-f]{6})$/;
-	  var reRgbInteger = /^rgb\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*\)$/;
-	  var reRgbPercent = /^rgb\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
-	  var reRgbaInteger = /^rgba\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var reRgbaPercent = /^rgba\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var reHslPercent = /^hsl\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
-	  var reHslaPercent = /^hsla\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var named = {
-	    aliceblue: 0xf0f8ff,
-	    antiquewhite: 0xfaebd7,
-	    aqua: 0x00ffff,
-	    aquamarine: 0x7fffd4,
-	    azure: 0xf0ffff,
-	    beige: 0xf5f5dc,
-	    bisque: 0xffe4c4,
-	    black: 0x000000,
-	    blanchedalmond: 0xffebcd,
-	    blue: 0x0000ff,
-	    blueviolet: 0x8a2be2,
-	    brown: 0xa52a2a,
-	    burlywood: 0xdeb887,
-	    cadetblue: 0x5f9ea0,
-	    chartreuse: 0x7fff00,
-	    chocolate: 0xd2691e,
-	    coral: 0xff7f50,
-	    cornflowerblue: 0x6495ed,
-	    cornsilk: 0xfff8dc,
-	    crimson: 0xdc143c,
-	    cyan: 0x00ffff,
-	    darkblue: 0x00008b,
-	    darkcyan: 0x008b8b,
-	    darkgoldenrod: 0xb8860b,
-	    darkgray: 0xa9a9a9,
-	    darkgreen: 0x006400,
-	    darkgrey: 0xa9a9a9,
-	    darkkhaki: 0xbdb76b,
-	    darkmagenta: 0x8b008b,
-	    darkolivegreen: 0x556b2f,
-	    darkorange: 0xff8c00,
-	    darkorchid: 0x9932cc,
-	    darkred: 0x8b0000,
-	    darksalmon: 0xe9967a,
-	    darkseagreen: 0x8fbc8f,
-	    darkslateblue: 0x483d8b,
-	    darkslategray: 0x2f4f4f,
-	    darkslategrey: 0x2f4f4f,
-	    darkturquoise: 0x00ced1,
-	    darkviolet: 0x9400d3,
-	    deeppink: 0xff1493,
-	    deepskyblue: 0x00bfff,
-	    dimgray: 0x696969,
-	    dimgrey: 0x696969,
-	    dodgerblue: 0x1e90ff,
-	    firebrick: 0xb22222,
-	    floralwhite: 0xfffaf0,
-	    forestgreen: 0x228b22,
-	    fuchsia: 0xff00ff,
-	    gainsboro: 0xdcdcdc,
-	    ghostwhite: 0xf8f8ff,
-	    gold: 0xffd700,
-	    goldenrod: 0xdaa520,
-	    gray: 0x808080,
-	    green: 0x008000,
-	    greenyellow: 0xadff2f,
-	    grey: 0x808080,
-	    honeydew: 0xf0fff0,
-	    hotpink: 0xff69b4,
-	    indianred: 0xcd5c5c,
-	    indigo: 0x4b0082,
-	    ivory: 0xfffff0,
-	    khaki: 0xf0e68c,
-	    lavender: 0xe6e6fa,
-	    lavenderblush: 0xfff0f5,
-	    lawngreen: 0x7cfc00,
-	    lemonchiffon: 0xfffacd,
-	    lightblue: 0xadd8e6,
-	    lightcoral: 0xf08080,
-	    lightcyan: 0xe0ffff,
-	    lightgoldenrodyellow: 0xfafad2,
-	    lightgray: 0xd3d3d3,
-	    lightgreen: 0x90ee90,
-	    lightgrey: 0xd3d3d3,
-	    lightpink: 0xffb6c1,
-	    lightsalmon: 0xffa07a,
-	    lightseagreen: 0x20b2aa,
-	    lightskyblue: 0x87cefa,
-	    lightslategray: 0x778899,
-	    lightslategrey: 0x778899,
-	    lightsteelblue: 0xb0c4de,
-	    lightyellow: 0xffffe0,
-	    lime: 0x00ff00,
-	    limegreen: 0x32cd32,
-	    linen: 0xfaf0e6,
-	    magenta: 0xff00ff,
-	    maroon: 0x800000,
-	    mediumaquamarine: 0x66cdaa,
-	    mediumblue: 0x0000cd,
-	    mediumorchid: 0xba55d3,
-	    mediumpurple: 0x9370db,
-	    mediumseagreen: 0x3cb371,
-	    mediumslateblue: 0x7b68ee,
-	    mediumspringgreen: 0x00fa9a,
-	    mediumturquoise: 0x48d1cc,
-	    mediumvioletred: 0xc71585,
-	    midnightblue: 0x191970,
-	    mintcream: 0xf5fffa,
-	    mistyrose: 0xffe4e1,
-	    moccasin: 0xffe4b5,
-	    navajowhite: 0xffdead,
-	    navy: 0x000080,
-	    oldlace: 0xfdf5e6,
-	    olive: 0x808000,
-	    olivedrab: 0x6b8e23,
-	    orange: 0xffa500,
-	    orangered: 0xff4500,
-	    orchid: 0xda70d6,
-	    palegoldenrod: 0xeee8aa,
-	    palegreen: 0x98fb98,
-	    paleturquoise: 0xafeeee,
-	    palevioletred: 0xdb7093,
-	    papayawhip: 0xffefd5,
-	    peachpuff: 0xffdab9,
-	    peru: 0xcd853f,
-	    pink: 0xffc0cb,
-	    plum: 0xdda0dd,
-	    powderblue: 0xb0e0e6,
-	    purple: 0x800080,
-	    rebeccapurple: 0x663399,
-	    red: 0xff0000,
-	    rosybrown: 0xbc8f8f,
-	    royalblue: 0x4169e1,
-	    saddlebrown: 0x8b4513,
-	    salmon: 0xfa8072,
-	    sandybrown: 0xf4a460,
-	    seagreen: 0x2e8b57,
-	    seashell: 0xfff5ee,
-	    sienna: 0xa0522d,
-	    silver: 0xc0c0c0,
-	    skyblue: 0x87ceeb,
-	    slateblue: 0x6a5acd,
-	    slategray: 0x708090,
-	    slategrey: 0x708090,
-	    snow: 0xfffafa,
-	    springgreen: 0x00ff7f,
-	    steelblue: 0x4682b4,
-	    tan: 0xd2b48c,
-	    teal: 0x008080,
-	    thistle: 0xd8bfd8,
-	    tomato: 0xff6347,
-	    turquoise: 0x40e0d0,
-	    violet: 0xee82ee,
-	    wheat: 0xf5deb3,
-	    white: 0xffffff,
-	    whitesmoke: 0xf5f5f5,
-	    yellow: 0xffff00,
-	    yellowgreen: 0x9acd32
-	  };
-	
-	  define(Color, color, {
-	    displayable: function() {
-	      return this.rgb().displayable();
-	    },
-	    toString: function() {
-	      return this.rgb() + "";
-	    }
-	  });
-	
-	  function color(format) {
-	    var m;
-	    format = (format + "").trim().toLowerCase();
-	    return (m = reHex3.exec(format)) ? (m = parseInt(m[1], 16), new Rgb((m >> 8 & 0xf) | (m >> 4 & 0x0f0), (m >> 4 & 0xf) | (m & 0xf0), ((m & 0xf) << 4) | (m & 0xf), 1)) // #f00
-	        : (m = reHex6.exec(format)) ? rgbn(parseInt(m[1], 16)) // #ff0000
-	        : (m = reRgbInteger.exec(format)) ? new Rgb(m[1], m[2], m[3], 1) // rgb(255, 0, 0)
-	        : (m = reRgbPercent.exec(format)) ? new Rgb(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, 1) // rgb(100%, 0%, 0%)
-	        : (m = reRgbaInteger.exec(format)) ? rgba(m[1], m[2], m[3], m[4]) // rgba(255, 0, 0, 1)
-	        : (m = reRgbaPercent.exec(format)) ? rgba(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, m[4]) // rgb(100%, 0%, 0%, 1)
-	        : (m = reHslPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, 1) // hsl(120, 50%, 50%)
-	        : (m = reHslaPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, m[4]) // hsla(120, 50%, 50%, 1)
-	        : named.hasOwnProperty(format) ? rgbn(named[format])
-	        : format === "transparent" ? new Rgb(NaN, NaN, NaN, 0)
-	        : null;
-	  }
-	
-	  function rgbn(n) {
-	    return new Rgb(n >> 16 & 0xff, n >> 8 & 0xff, n & 0xff, 1);
-	  }
-	
-	  function rgba(r, g, b, a) {
-	    if (a <= 0) r = g = b = NaN;
-	    return new Rgb(r, g, b, a);
-	  }
-	
-	  function rgbConvert(o) {
-	    if (!(o instanceof Color)) o = color(o);
-	    if (!o) return new Rgb;
-	    o = o.rgb();
-	    return new Rgb(o.r, o.g, o.b, o.opacity);
-	  }
-	
-	  function rgb(r, g, b, opacity) {
-	    return arguments.length === 1 ? rgbConvert(r) : new Rgb(r, g, b, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Rgb(r, g, b, opacity) {
-	    this.r = +r;
-	    this.g = +g;
-	    this.b = +b;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Rgb, rgb, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
-	    },
-	    rgb: function() {
-	      return this;
-	    },
-	    displayable: function() {
-	      return (0 <= this.r && this.r <= 255)
-	          && (0 <= this.g && this.g <= 255)
-	          && (0 <= this.b && this.b <= 255)
-	          && (0 <= this.opacity && this.opacity <= 1);
-	    },
-	    toString: function() {
-	      var a = this.opacity; a = isNaN(a) ? 1 : Math.max(0, Math.min(1, a));
-	      return (a === 1 ? "rgb(" : "rgba(")
-	          + Math.max(0, Math.min(255, Math.round(this.r) || 0)) + ", "
-	          + Math.max(0, Math.min(255, Math.round(this.g) || 0)) + ", "
-	          + Math.max(0, Math.min(255, Math.round(this.b) || 0))
-	          + (a === 1 ? ")" : ", " + a + ")");
-	    }
-	  }));
-	
-	  function hsla(h, s, l, a) {
-	    if (a <= 0) h = s = l = NaN;
-	    else if (l <= 0 || l >= 1) h = s = NaN;
-	    else if (s <= 0) h = NaN;
-	    return new Hsl(h, s, l, a);
-	  }
-	
-	  function hslConvert(o) {
-	    if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
-	    if (!(o instanceof Color)) o = color(o);
-	    if (!o) return new Hsl;
-	    if (o instanceof Hsl) return o;
-	    o = o.rgb();
-	    var r = o.r / 255,
-	        g = o.g / 255,
-	        b = o.b / 255,
-	        min = Math.min(r, g, b),
-	        max = Math.max(r, g, b),
-	        h = NaN,
-	        s = max - min,
-	        l = (max + min) / 2;
-	    if (s) {
-	      if (r === max) h = (g - b) / s + (g < b) * 6;
-	      else if (g === max) h = (b - r) / s + 2;
-	      else h = (r - g) / s + 4;
-	      s /= l < 0.5 ? max + min : 2 - max - min;
-	      h *= 60;
-	    } else {
-	      s = l > 0 && l < 1 ? 0 : h;
-	    }
-	    return new Hsl(h, s, l, o.opacity);
-	  }
-	
-	  function hsl(h, s, l, opacity) {
-	    return arguments.length === 1 ? hslConvert(h) : new Hsl(h, s, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Hsl(h, s, l, opacity) {
-	    this.h = +h;
-	    this.s = +s;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Hsl, hsl, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    rgb: function() {
-	      var h = this.h % 360 + (this.h < 0) * 360,
-	          s = isNaN(h) || isNaN(this.s) ? 0 : this.s,
-	          l = this.l,
-	          m2 = l + (l < 0.5 ? l : 1 - l) * s,
-	          m1 = 2 * l - m2;
-	      return new Rgb(
-	        hsl2rgb(h >= 240 ? h - 240 : h + 120, m1, m2),
-	        hsl2rgb(h, m1, m2),
-	        hsl2rgb(h < 120 ? h + 240 : h - 120, m1, m2),
-	        this.opacity
-	      );
-	    },
-	    displayable: function() {
-	      return (0 <= this.s && this.s <= 1 || isNaN(this.s))
-	          && (0 <= this.l && this.l <= 1)
-	          && (0 <= this.opacity && this.opacity <= 1);
-	    }
-	  }));
-	
-	  /* From FvD 13.37, CSS Color Module Level 3 */
-	  function hsl2rgb(h, m1, m2) {
-	    return (h < 60 ? m1 + (m2 - m1) * h / 60
-	        : h < 180 ? m2
-	        : h < 240 ? m1 + (m2 - m1) * (240 - h) / 60
-	        : m1) * 255;
-	  }
-	
-	  var deg2rad = Math.PI / 180;
-	  var rad2deg = 180 / Math.PI;
-	
-	  var Kn = 18;
-	  var Xn = 0.950470;
-	  var Yn = 1;
-	  var Zn = 1.088830;
-	  var t0 = 4 / 29;
-	  var t1 = 6 / 29;
-	  var t2 = 3 * t1 * t1;
-	  var t3 = t1 * t1 * t1;
-	  function labConvert(o) {
-	    if (o instanceof Lab) return new Lab(o.l, o.a, o.b, o.opacity);
-	    if (o instanceof Hcl) {
-	      var h = o.h * deg2rad;
-	      return new Lab(o.l, Math.cos(h) * o.c, Math.sin(h) * o.c, o.opacity);
-	    }
-	    if (!(o instanceof Rgb)) o = rgbConvert(o);
-	    var b = rgb2xyz(o.r),
-	        a = rgb2xyz(o.g),
-	        l = rgb2xyz(o.b),
-	        x = xyz2lab((0.4124564 * b + 0.3575761 * a + 0.1804375 * l) / Xn),
-	        y = xyz2lab((0.2126729 * b + 0.7151522 * a + 0.0721750 * l) / Yn),
-	        z = xyz2lab((0.0193339 * b + 0.1191920 * a + 0.9503041 * l) / Zn);
-	    return new Lab(116 * y - 16, 500 * (x - y), 200 * (y - z), o.opacity);
-	  }
-	
-	  function lab(l, a, b, opacity) {
-	    return arguments.length === 1 ? labConvert(l) : new Lab(l, a, b, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Lab(l, a, b, opacity) {
-	    this.l = +l;
-	    this.a = +a;
-	    this.b = +b;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Lab, lab, extend(Color, {
-	    brighter: function(k) {
-	      return new Lab(this.l + Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
-	    },
-	    darker: function(k) {
-	      return new Lab(this.l - Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
-	    },
-	    rgb: function() {
-	      var y = (this.l + 16) / 116,
-	          x = isNaN(this.a) ? y : y + this.a / 500,
-	          z = isNaN(this.b) ? y : y - this.b / 200;
-	      y = Yn * lab2xyz(y);
-	      x = Xn * lab2xyz(x);
-	      z = Zn * lab2xyz(z);
-	      return new Rgb(
-	        xyz2rgb( 3.2404542 * x - 1.5371385 * y - 0.4985314 * z), // D65 -> sRGB
-	        xyz2rgb(-0.9692660 * x + 1.8760108 * y + 0.0415560 * z),
-	        xyz2rgb( 0.0556434 * x - 0.2040259 * y + 1.0572252 * z),
-	        this.opacity
-	      );
-	    }
-	  }));
-	
-	  function xyz2lab(t) {
-	    return t > t3 ? Math.pow(t, 1 / 3) : t / t2 + t0;
-	  }
-	
-	  function lab2xyz(t) {
-	    return t > t1 ? t * t * t : t2 * (t - t0);
-	  }
-	
-	  function xyz2rgb(x) {
-	    return 255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055);
-	  }
-	
-	  function rgb2xyz(x) {
-	    return (x /= 255) <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-	  }
-	
-	  function hclConvert(o) {
-	    if (o instanceof Hcl) return new Hcl(o.h, o.c, o.l, o.opacity);
-	    if (!(o instanceof Lab)) o = labConvert(o);
-	    var h = Math.atan2(o.b, o.a) * rad2deg;
-	    return new Hcl(h < 0 ? h + 360 : h, Math.sqrt(o.a * o.a + o.b * o.b), o.l, o.opacity);
-	  }
-	
-	  function hcl(h, c, l, opacity) {
-	    return arguments.length === 1 ? hclConvert(h) : new Hcl(h, c, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Hcl(h, c, l, opacity) {
-	    this.h = +h;
-	    this.c = +c;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Hcl, hcl, extend(Color, {
-	    brighter: function(k) {
-	      return new Hcl(this.h, this.c, this.l + Kn * (k == null ? 1 : k), this.opacity);
-	    },
-	    darker: function(k) {
-	      return new Hcl(this.h, this.c, this.l - Kn * (k == null ? 1 : k), this.opacity);
-	    },
-	    rgb: function() {
-	      return labConvert(this).rgb();
-	    }
-	  }));
-	
-	  var A = -0.14861;
-	  var B = +1.78277;
-	  var C = -0.29227;
-	  var D = -0.90649;
-	  var E = +1.97294;
-	  var ED = E * D;
-	  var EB = E * B;
-	  var BC_DA = B * C - D * A;
-	  function cubehelixConvert(o) {
-	    if (o instanceof Cubehelix) return new Cubehelix(o.h, o.s, o.l, o.opacity);
-	    if (!(o instanceof Rgb)) o = rgbConvert(o);
-	    var r = o.r / 255,
-	        g = o.g / 255,
-	        b = o.b / 255,
-	        l = (BC_DA * b + ED * r - EB * g) / (BC_DA + ED - EB),
-	        bl = b - l,
-	        k = (E * (g - l) - C * bl) / D,
-	        s = Math.sqrt(k * k + bl * bl) / (E * l * (1 - l)), // NaN if l=0 or l=1
-	        h = s ? Math.atan2(k, bl) * rad2deg - 120 : NaN;
-	    return new Cubehelix(h < 0 ? h + 360 : h, s, l, o.opacity);
-	  }
-	
-	  function cubehelix(h, s, l, opacity) {
-	    return arguments.length === 1 ? cubehelixConvert(h) : new Cubehelix(h, s, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Cubehelix(h, s, l, opacity) {
-	    this.h = +h;
-	    this.s = +s;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Cubehelix, cubehelix, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    rgb: function() {
-	      var h = isNaN(this.h) ? 0 : (this.h + 120) * deg2rad,
-	          l = +this.l,
-	          a = isNaN(this.s) ? 0 : this.s * l * (1 - l),
-	          cosh = Math.cos(h),
-	          sinh = Math.sin(h);
-	      return new Rgb(
-	        255 * (l + a * (A * cosh + B * sinh)),
-	        255 * (l + a * (C * cosh + D * sinh)),
-	        255 * (l + a * (E * cosh)),
-	        this.opacity
-	      );
-	    }
-	  }));
-	
-	  var version = "0.4.2";
-	
-	  exports.version = version;
-	  exports.color = color;
-	  exports.rgb = rgb;
-	  exports.hsl = hsl;
-	  exports.lab = lab;
-	  exports.hcl = hcl;
-	  exports.cubehelix = cubehelix;
-	
-	}));
-
-/***/ },
-/* 20 */
-/***/ function(module, exports, __webpack_require__) {
-
-	(function (global, factory) {
 	   true ? factory(exports) :
 	  typeof define === 'function' && define.amd ? define(['exports'], factory) :
 	  (factory((global.d3_format = {})));
@@ -6016,7 +5043,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
-/* 21 */
+/* 19 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
@@ -6370,11 +5397,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
-/* 22 */
+/* 20 */
 /***/ function(module, exports, __webpack_require__) {
 
 	(function (global, factory) {
-	   true ? factory(exports, __webpack_require__(21)) :
+	   true ? factory(exports, __webpack_require__(19)) :
 	  typeof define === 'function' && define.amd ? define(['exports', 'd3-time'], factory) :
 	  (factory((global.d3_time_format = {}),global.d3_time));
 	}(this, function (exports,d3Time) { 'use strict';
@@ -7208,526 +6235,1449 @@ return /******/ (function(modules) { // webpackBootstrap
 	}));
 
 /***/ },
+/* 21 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(module) {;var bigRat = (function (bigInt) {
+	    "use strict";
+	
+	    function BigRational(num, denom) {
+	        // Alias properties kept for backwards compatability
+	        if (denom.isZero()) throw "Denominator cannot be 0.";
+	        this.numerator = this.num = num;
+	        this.denominator = this.denom = denom;
+	    }
+	
+	    var gcd = bigInt.gcd,
+	        lcm = bigInt.lcm;
+	
+	    function reduce(n, d) {
+	        var divisor = gcd(n, d),
+	            num = n.over(divisor),
+	            denom = d.over(divisor);
+	        if (denom.isNegative()) {
+	            return new BigRational(num.negate(), denom.negate());
+	        }
+	        return new BigRational(num, denom);
+	    }
+	
+	    BigRational.prototype.add = function (n, d) {
+	        var v = interpret(n, d),
+	            multiple = lcm(this.denom, v.denom),
+	            a = multiple.divide(this.denom),
+	            b = multiple.divide(v.denom);
+	
+	        a = this.num.times(a);
+	        b = v.num.times(b);
+	        return reduce(a.add(b), multiple);
+	    };
+	    BigRational.prototype.plus = BigRational.prototype.add;
+	
+	    BigRational.prototype.subtract = function (n, d) {
+	        var v = interpret(n, d);
+	        return this.add(v.negate());
+	    };
+	    BigRational.prototype.minus = BigRational.prototype.subtract;
+	
+	    BigRational.prototype.multiply = function (n, d) {
+	        var v = interpret(n, d);
+	        return reduce(this.num.times(v.num), this.denom.times(v.denom));
+	    };
+	    BigRational.prototype.times = BigRational.prototype.multiply;
+	
+	    BigRational.prototype.divide = function (n, d) {
+	        var v = interpret(n, d);
+	        return reduce(this.num.times(v.denom), this.denom.times(v.num));
+	    };
+	    BigRational.prototype.over = BigRational.prototype.divide;
+	
+	    BigRational.prototype.reciprocate = function () {
+	        return new BigRational(this.denom, this.num);
+	    };
+	    BigRational.prototype.mod = function (n, d) {
+	        var v = interpret(n, d);
+	        return this.minus(v.times(this.over(v).floor()));
+	    };
+	    BigRational.prototype.pow = function (n) {
+	        var v = bigInt(n);
+	        var num = this.num.pow(v),
+	            denom = this.denom.pow(v);
+	        return reduce(num, denom);
+	    };
+	
+	    BigRational.prototype.floor = function (toBigInt) {
+	        var divmod = this.num.divmod(this.denom),
+	            floor;
+	        if (divmod.remainder.isZero() || !divmod.quotient.sign) {
+	            floor = divmod.quotient;
+	        }
+	        else floor = divmod.quotient.prev();
+	        if (toBigInt) return floor;
+	        return new BigRational(floor, bigInt[1]);
+	    };
+	    BigRational.prototype.ceil = function (toBigInt) {
+	        var divmod = this.num.divmod(this.denom),
+	            ceil;
+	        if (divmod.remainder.isZero() || divmod.quotient.sign) {
+	            ceil = divmod.quotient;
+	        }
+	        else ceil = divmod.quotient.next();
+	        if (toBigInt) return ceil;
+	        return new BigRational(ceil, bigInt[1]);
+	    };
+	    BigRational.prototype.round = function (toBigInt) {
+	        return this.add(1, 2).floor(toBigInt);
+	    };
+	
+	    BigRational.prototype.compareAbs = function (n, d) {
+	        var v = interpret(n, d);
+	        if (this.denom.equals(v.denom)) {
+	            return this.num.compareAbs(v.num);
+	        }
+	        return this.num.times(v.denom).compareAbs(v.num.times(this.denom));
+	    };
+	    BigRational.prototype.compare = function (n, d) {
+	        var v = interpret(n, d);
+	        if (this.denom.equals(v.denom)) {
+	            return this.num.compare(v.num);
+	        }
+	        var comparison = this.denom.sign === v.denom.sign ? 1 : -1;
+	        return comparison * this.num.times(v.denom).compare(v.num.times(this.denom));
+	    };
+	    BigRational.prototype.compareTo = BigRational.prototype.compare;
+	
+	    BigRational.prototype.equals = function (n, d) {
+	        return this.compare(n, d) === 0;
+	    };
+	    BigRational.prototype.eq = BigRational.prototype.equals;
+	
+	    BigRational.prototype.notEquals = function (n, d) {
+	        return this.compare(n, d) !== 0;
+	    };
+	    BigRational.prototype.neq = BigRational.prototype.notEquals;
+	
+	    BigRational.prototype.lesser = function (n, d) {
+	        return this.compare(n, d) < 0;
+	    };
+	    BigRational.prototype.lt = BigRational.prototype.lesser;
+	
+	    BigRational.prototype.lesserOrEquals = function (n, d) {
+	        return this.compare(n, d) <= 0;
+	    };
+	    BigRational.prototype.leq = BigRational.prototype.lesserOrEquals;
+	
+	    BigRational.prototype.greater = function (n, d) {
+	        return this.compare(n, d) > 0;
+	    };
+	    BigRational.prototype.gt = BigRational.prototype.greater;
+	
+	    BigRational.prototype.greaterOrEquals = function (n, d) {
+	        return this.compare(n, d) >= 0;
+	    };
+	    BigRational.prototype.geq = BigRational.prototype.greaterOrEquals;
+	
+	    BigRational.prototype.abs = function () {
+	        if (this.isPositive()) return this;
+	        return this.negate();
+	    };
+	    BigRational.prototype.negate = function () {
+	        if (this.denom.sign) {
+	            return new BigRational(this.num, this.denom.negate());
+	        }
+	        return new BigRational(this.num.negate(), this.denom);
+	    };
+	    BigRational.prototype.isNegative = function () {
+	        return this.num.sign !== this.denom.sign && !this.num.isZero();
+	    };
+	    BigRational.prototype.isPositive = function () {
+	        return this.num.sign === this.denom.sign && !this.num.isZero();
+	    };
+	    BigRational.prototype.isZero = function () {
+	        return this.num.isZero();
+	    };
+	
+	    BigRational.prototype.toDecimal = function (digits) {
+	        digits = digits || 10;
+	        var n = this.num.divmod(this.denom);
+	        var intPart = n.quotient.abs().toString();
+	        var remainder = parse(n.remainder.abs(), this.denom);
+	        var shiftedRemainder = remainder.times(bigInt("1e" + digits));
+	        var decPart = shiftedRemainder.num.over(shiftedRemainder.denom).toString();
+	        if (decPart.length < digits) {
+	            decPart = new Array(digits - decPart.length + 1).join("0") + decPart;
+	        }
+	        if (shiftedRemainder.num.mod(shiftedRemainder.denom).isZero()) {
+	            while (decPart.slice(-1) === "0") {
+	                decPart = decPart.slice(0, -1);
+	            }
+	        }
+	        if (this.isNegative()) {
+	          intPart = "-"+intPart;
+	        }
+	        if (decPart === "") {
+	            return intPart;
+	        }
+	        return intPart + "." + decPart;
+	    };
+	
+	    BigRational.prototype.toString = function () {
+	        return String(this.num) + "/" + String(this.denom);
+	    };
+	
+	    BigRational.prototype.valueOf = function () {
+	        return this.num / this.denom;
+	    };
+	
+	    function interpret(n, d) {
+	        return parse(n, d);
+	    }
+	    function parseDecimal(n) {
+	        var parts = n.split(/e/i);
+	        if(parts.length > 2) {
+	            throw new Error("Invalid input: too many 'e' tokens");
+	        }
+	        if(parts.length > 1) {
+	            var isPositive = true;
+	            if(parts[1][0] === "-") {
+	                parts[1] = parts[1].slice(1);
+	                isPositive = false;
+	            }
+	            if(parts[1][0] === "+") {
+	                parts[1] = parts[1].slice(1);
+	            }
+	            var significand = parseDecimal(parts[0]);
+	            var exponent = new BigRational(bigInt(10).pow(parts[1]), bigInt[1]);
+	            if(isPositive) {
+	                return significand.times(exponent);
+	            } else {
+	                return significand.over(exponent);
+	            }
+	        }
+	        parts = n.trim().split(".");
+	        if(parts.length > 2) {
+	            throw new Error("Invalid input: too many '.' tokens");
+	        }
+	        if(parts.length > 1) {
+	            var isNegative = parts[0][0] === '-';
+	            if (isNegative) parts[0] = parts[0].slice(1);
+	            var intPart = new BigRational(bigInt(parts[0]), bigInt[1]);
+	            var length = parts[1].length;
+	            while(parts[1][0] === "0") {
+	                parts[1] = parts[1].slice(1);
+	            }
+	            var exp = "1" + Array(length + 1).join("0");
+	            var decPart = reduce(bigInt(parts[1]), bigInt(exp));
+	            intPart = intPart.add(decPart);
+	            if (isNegative) intPart = intPart.negate();
+	            return intPart;
+	        }
+	        return new BigRational(bigInt(n), bigInt[1]);
+	    }
+	    function parse(a, b) {
+	        if(!a) {
+	            return new BigRational(bigInt(0), bigInt[1]);
+	        }
+	        if(b) {
+	            return reduce(bigInt(a), bigInt(b));
+	        }
+	        if (bigInt.isInstance(a)) {
+	            return new BigRational(a, bigInt[1]);
+	        }
+	        if (a instanceof BigRational) return a;
+	
+	        var num;
+	        var denom;
+	
+	        var text = String(a);
+	        var texts = text.split("/");
+	        if(texts.length > 2) {
+	            throw new Error("Invalid input: too many '/' tokens");
+	        }
+	        if(texts.length > 1) {
+	            var parts = texts[0].split("_");
+	            if(parts.length > 2) {
+	                throw new Error("Invalid input: too many '_' tokens");
+	            }
+	            if(parts.length > 1) {
+	                var isPositive = parts[0][0] !== "-";
+	                num = bigInt(parts[0]).times(texts[1]);
+	                if(isPositive) {
+	                    num = num.add(parts[1]);
+	                } else {
+	                    num = num.subtract(parts[1]);
+	                }
+	                denom = bigInt(texts[1]);
+	                return reduce(num, denom);
+	            }
+	            return reduce(bigInt(texts[0]), bigInt(texts[1]));
+	        }
+	        return parseDecimal(text);
+	    }
+	
+	    parse.zero = parse(0);
+	    parse.one = parse(1);
+	    parse.minusOne = parse(-1);
+	
+	    return parse;
+	})(typeof bigInt !== "undefined" ? bigInt : __webpack_require__(23));
+	if (true) {
+	    if (module.hasOwnProperty("exports")) {
+	        module.exports = bigRat;
+	    }
+	}
+	
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(22)(module)))
+
+/***/ },
+/* 22 */
+/***/ function(module, exports) {
+
+	module.exports = function(module) {
+		if(!module.webpackPolyfill) {
+			module.deprecate = function() {};
+			module.paths = [];
+			// module.parent = undefined by default
+			module.children = [];
+			module.webpackPolyfill = 1;
+		}
+		return module;
+	}
+
+
+/***/ },
 /* 23 */
 /***/ function(module, exports, __webpack_require__) {
 
-	(function (global, factory) {
-	   true ? factory(exports) :
-	  typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	  (factory((global.d3_color = global.d3_color || {})));
-	}(this, function (exports) { 'use strict';
+	/* WEBPACK VAR INJECTION */(function(module) {var bigInt = (function (undefined) {
+	    "use strict";
 	
-	  function define(constructor, factory, prototype) {
-	    constructor.prototype = factory.prototype = prototype;
-	    prototype.constructor = constructor;
-	  }
+	    var BASE = 1e7,
+	        LOG_BASE = 7,
+	        MAX_INT = 9007199254740992,
+	        MAX_INT_ARR = smallToArray(MAX_INT),
+	        LOG_MAX_INT = Math.log(MAX_INT);
 	
-	  function extend(parent, definition) {
-	    var prototype = Object.create(parent.prototype);
-	    for (var key in definition) prototype[key] = definition[key];
-	    return prototype;
-	  }
-	
-	  function Color() {}
-	
-	  var darker = 0.7;
-	  var brighter = 1 / darker;
-	
-	  var reHex3 = /^#([0-9a-f]{3})$/;
-	  var reHex6 = /^#([0-9a-f]{6})$/;
-	  var reRgbInteger = /^rgb\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*\)$/;
-	  var reRgbPercent = /^rgb\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
-	  var reRgbaInteger = /^rgba\(\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var reRgbaPercent = /^rgba\(\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var reHslPercent = /^hsl\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*\)$/;
-	  var reHslaPercent = /^hsla\(\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)%\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)$/;
-	  var named = {
-	    aliceblue: 0xf0f8ff,
-	    antiquewhite: 0xfaebd7,
-	    aqua: 0x00ffff,
-	    aquamarine: 0x7fffd4,
-	    azure: 0xf0ffff,
-	    beige: 0xf5f5dc,
-	    bisque: 0xffe4c4,
-	    black: 0x000000,
-	    blanchedalmond: 0xffebcd,
-	    blue: 0x0000ff,
-	    blueviolet: 0x8a2be2,
-	    brown: 0xa52a2a,
-	    burlywood: 0xdeb887,
-	    cadetblue: 0x5f9ea0,
-	    chartreuse: 0x7fff00,
-	    chocolate: 0xd2691e,
-	    coral: 0xff7f50,
-	    cornflowerblue: 0x6495ed,
-	    cornsilk: 0xfff8dc,
-	    crimson: 0xdc143c,
-	    cyan: 0x00ffff,
-	    darkblue: 0x00008b,
-	    darkcyan: 0x008b8b,
-	    darkgoldenrod: 0xb8860b,
-	    darkgray: 0xa9a9a9,
-	    darkgreen: 0x006400,
-	    darkgrey: 0xa9a9a9,
-	    darkkhaki: 0xbdb76b,
-	    darkmagenta: 0x8b008b,
-	    darkolivegreen: 0x556b2f,
-	    darkorange: 0xff8c00,
-	    darkorchid: 0x9932cc,
-	    darkred: 0x8b0000,
-	    darksalmon: 0xe9967a,
-	    darkseagreen: 0x8fbc8f,
-	    darkslateblue: 0x483d8b,
-	    darkslategray: 0x2f4f4f,
-	    darkslategrey: 0x2f4f4f,
-	    darkturquoise: 0x00ced1,
-	    darkviolet: 0x9400d3,
-	    deeppink: 0xff1493,
-	    deepskyblue: 0x00bfff,
-	    dimgray: 0x696969,
-	    dimgrey: 0x696969,
-	    dodgerblue: 0x1e90ff,
-	    firebrick: 0xb22222,
-	    floralwhite: 0xfffaf0,
-	    forestgreen: 0x228b22,
-	    fuchsia: 0xff00ff,
-	    gainsboro: 0xdcdcdc,
-	    ghostwhite: 0xf8f8ff,
-	    gold: 0xffd700,
-	    goldenrod: 0xdaa520,
-	    gray: 0x808080,
-	    green: 0x008000,
-	    greenyellow: 0xadff2f,
-	    grey: 0x808080,
-	    honeydew: 0xf0fff0,
-	    hotpink: 0xff69b4,
-	    indianred: 0xcd5c5c,
-	    indigo: 0x4b0082,
-	    ivory: 0xfffff0,
-	    khaki: 0xf0e68c,
-	    lavender: 0xe6e6fa,
-	    lavenderblush: 0xfff0f5,
-	    lawngreen: 0x7cfc00,
-	    lemonchiffon: 0xfffacd,
-	    lightblue: 0xadd8e6,
-	    lightcoral: 0xf08080,
-	    lightcyan: 0xe0ffff,
-	    lightgoldenrodyellow: 0xfafad2,
-	    lightgray: 0xd3d3d3,
-	    lightgreen: 0x90ee90,
-	    lightgrey: 0xd3d3d3,
-	    lightpink: 0xffb6c1,
-	    lightsalmon: 0xffa07a,
-	    lightseagreen: 0x20b2aa,
-	    lightskyblue: 0x87cefa,
-	    lightslategray: 0x778899,
-	    lightslategrey: 0x778899,
-	    lightsteelblue: 0xb0c4de,
-	    lightyellow: 0xffffe0,
-	    lime: 0x00ff00,
-	    limegreen: 0x32cd32,
-	    linen: 0xfaf0e6,
-	    magenta: 0xff00ff,
-	    maroon: 0x800000,
-	    mediumaquamarine: 0x66cdaa,
-	    mediumblue: 0x0000cd,
-	    mediumorchid: 0xba55d3,
-	    mediumpurple: 0x9370db,
-	    mediumseagreen: 0x3cb371,
-	    mediumslateblue: 0x7b68ee,
-	    mediumspringgreen: 0x00fa9a,
-	    mediumturquoise: 0x48d1cc,
-	    mediumvioletred: 0xc71585,
-	    midnightblue: 0x191970,
-	    mintcream: 0xf5fffa,
-	    mistyrose: 0xffe4e1,
-	    moccasin: 0xffe4b5,
-	    navajowhite: 0xffdead,
-	    navy: 0x000080,
-	    oldlace: 0xfdf5e6,
-	    olive: 0x808000,
-	    olivedrab: 0x6b8e23,
-	    orange: 0xffa500,
-	    orangered: 0xff4500,
-	    orchid: 0xda70d6,
-	    palegoldenrod: 0xeee8aa,
-	    palegreen: 0x98fb98,
-	    paleturquoise: 0xafeeee,
-	    palevioletred: 0xdb7093,
-	    papayawhip: 0xffefd5,
-	    peachpuff: 0xffdab9,
-	    peru: 0xcd853f,
-	    pink: 0xffc0cb,
-	    plum: 0xdda0dd,
-	    powderblue: 0xb0e0e6,
-	    purple: 0x800080,
-	    rebeccapurple: 0x663399,
-	    red: 0xff0000,
-	    rosybrown: 0xbc8f8f,
-	    royalblue: 0x4169e1,
-	    saddlebrown: 0x8b4513,
-	    salmon: 0xfa8072,
-	    sandybrown: 0xf4a460,
-	    seagreen: 0x2e8b57,
-	    seashell: 0xfff5ee,
-	    sienna: 0xa0522d,
-	    silver: 0xc0c0c0,
-	    skyblue: 0x87ceeb,
-	    slateblue: 0x6a5acd,
-	    slategray: 0x708090,
-	    slategrey: 0x708090,
-	    snow: 0xfffafa,
-	    springgreen: 0x00ff7f,
-	    steelblue: 0x4682b4,
-	    tan: 0xd2b48c,
-	    teal: 0x008080,
-	    thistle: 0xd8bfd8,
-	    tomato: 0xff6347,
-	    turquoise: 0x40e0d0,
-	    violet: 0xee82ee,
-	    wheat: 0xf5deb3,
-	    white: 0xffffff,
-	    whitesmoke: 0xf5f5f5,
-	    yellow: 0xffff00,
-	    yellowgreen: 0x9acd32
-	  };
-	
-	  define(Color, color, {
-	    displayable: function() {
-	      return this.rgb().displayable();
-	    },
-	    toString: function() {
-	      return this.rgb() + "";
+	    function BigInteger(value, sign) {
+	        this.value = value;
+	        this.sign = sign;
+	        this.isSmall = false;
 	    }
-	  });
 	
-	  function color(format) {
-	    var m;
-	    format = (format + "").trim().toLowerCase();
-	    return (m = reHex3.exec(format)) ? (m = parseInt(m[1], 16), new Rgb((m >> 8 & 0xf) | (m >> 4 & 0x0f0), (m >> 4 & 0xf) | (m & 0xf0), ((m & 0xf) << 4) | (m & 0xf), 1)) // #f00
-	        : (m = reHex6.exec(format)) ? rgbn(parseInt(m[1], 16)) // #ff0000
-	        : (m = reRgbInteger.exec(format)) ? new Rgb(m[1], m[2], m[3], 1) // rgb(255, 0, 0)
-	        : (m = reRgbPercent.exec(format)) ? new Rgb(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, 1) // rgb(100%, 0%, 0%)
-	        : (m = reRgbaInteger.exec(format)) ? rgba(m[1], m[2], m[3], m[4]) // rgba(255, 0, 0, 1)
-	        : (m = reRgbaPercent.exec(format)) ? rgba(m[1] * 255 / 100, m[2] * 255 / 100, m[3] * 255 / 100, m[4]) // rgb(100%, 0%, 0%, 1)
-	        : (m = reHslPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, 1) // hsl(120, 50%, 50%)
-	        : (m = reHslaPercent.exec(format)) ? hsla(m[1], m[2] / 100, m[3] / 100, m[4]) // hsla(120, 50%, 50%, 1)
-	        : named.hasOwnProperty(format) ? rgbn(named[format])
-	        : format === "transparent" ? new Rgb(NaN, NaN, NaN, 0)
-	        : null;
-	  }
-	
-	  function rgbn(n) {
-	    return new Rgb(n >> 16 & 0xff, n >> 8 & 0xff, n & 0xff, 1);
-	  }
-	
-	  function rgba(r, g, b, a) {
-	    if (a <= 0) r = g = b = NaN;
-	    return new Rgb(r, g, b, a);
-	  }
-	
-	  function rgbConvert(o) {
-	    if (!(o instanceof Color)) o = color(o);
-	    if (!o) return new Rgb;
-	    o = o.rgb();
-	    return new Rgb(o.r, o.g, o.b, o.opacity);
-	  }
-	
-	  function rgb(r, g, b, opacity) {
-	    return arguments.length === 1 ? rgbConvert(r) : new Rgb(r, g, b, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Rgb(r, g, b, opacity) {
-	    this.r = +r;
-	    this.g = +g;
-	    this.b = +b;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Rgb, rgb, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Rgb(this.r * k, this.g * k, this.b * k, this.opacity);
-	    },
-	    rgb: function() {
-	      return this;
-	    },
-	    displayable: function() {
-	      return (0 <= this.r && this.r <= 255)
-	          && (0 <= this.g && this.g <= 255)
-	          && (0 <= this.b && this.b <= 255)
-	          && (0 <= this.opacity && this.opacity <= 1);
-	    },
-	    toString: function() {
-	      var a = this.opacity; a = isNaN(a) ? 1 : Math.max(0, Math.min(1, a));
-	      return (a === 1 ? "rgb(" : "rgba(")
-	          + Math.max(0, Math.min(255, Math.round(this.r) || 0)) + ", "
-	          + Math.max(0, Math.min(255, Math.round(this.g) || 0)) + ", "
-	          + Math.max(0, Math.min(255, Math.round(this.b) || 0))
-	          + (a === 1 ? ")" : ", " + a + ")");
+	    function SmallInteger(value) {
+	        this.value = value;
+	        this.sign = value < 0;
+	        this.isSmall = true;
 	    }
-	  }));
 	
-	  function hsla(h, s, l, a) {
-	    if (a <= 0) h = s = l = NaN;
-	    else if (l <= 0 || l >= 1) h = s = NaN;
-	    else if (s <= 0) h = NaN;
-	    return new Hsl(h, s, l, a);
-	  }
-	
-	  function hslConvert(o) {
-	    if (o instanceof Hsl) return new Hsl(o.h, o.s, o.l, o.opacity);
-	    if (!(o instanceof Color)) o = color(o);
-	    if (!o) return new Hsl;
-	    if (o instanceof Hsl) return o;
-	    o = o.rgb();
-	    var r = o.r / 255,
-	        g = o.g / 255,
-	        b = o.b / 255,
-	        min = Math.min(r, g, b),
-	        max = Math.max(r, g, b),
-	        h = NaN,
-	        s = max - min,
-	        l = (max + min) / 2;
-	    if (s) {
-	      if (r === max) h = (g - b) / s + (g < b) * 6;
-	      else if (g === max) h = (b - r) / s + 2;
-	      else h = (r - g) / s + 4;
-	      s /= l < 0.5 ? max + min : 2 - max - min;
-	      h *= 60;
-	    } else {
-	      s = l > 0 && l < 1 ? 0 : h;
+	    function isPrecise(n) {
+	        return -MAX_INT < n && n < MAX_INT;
 	    }
-	    return new Hsl(h, s, l, o.opacity);
-	  }
 	
-	  function hsl(h, s, l, opacity) {
-	    return arguments.length === 1 ? hslConvert(h) : new Hsl(h, s, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Hsl(h, s, l, opacity) {
-	    this.h = +h;
-	    this.s = +s;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Hsl, hsl, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Hsl(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    rgb: function() {
-	      var h = this.h % 360 + (this.h < 0) * 360,
-	          s = isNaN(h) || isNaN(this.s) ? 0 : this.s,
-	          l = this.l,
-	          m2 = l + (l < 0.5 ? l : 1 - l) * s,
-	          m1 = 2 * l - m2;
-	      return new Rgb(
-	        hsl2rgb(h >= 240 ? h - 240 : h + 120, m1, m2),
-	        hsl2rgb(h, m1, m2),
-	        hsl2rgb(h < 120 ? h + 240 : h - 120, m1, m2),
-	        this.opacity
-	      );
-	    },
-	    displayable: function() {
-	      return (0 <= this.s && this.s <= 1 || isNaN(this.s))
-	          && (0 <= this.l && this.l <= 1)
-	          && (0 <= this.opacity && this.opacity <= 1);
+	    function smallToArray(n) { // For performance reasons doesn't reference BASE, need to change this function if BASE changes
+	        if (n < 1e7)
+	            return [n];
+	        if (n < 1e14)
+	            return [n % 1e7, Math.floor(n / 1e7)];
+	        return [n % 1e7, Math.floor(n / 1e7) % 1e7, Math.floor(n / 1e14)];
 	    }
-	  }));
 	
-	  /* From FvD 13.37, CSS Color Module Level 3 */
-	  function hsl2rgb(h, m1, m2) {
-	    return (h < 60 ? m1 + (m2 - m1) * h / 60
-	        : h < 180 ? m2
-	        : h < 240 ? m1 + (m2 - m1) * (240 - h) / 60
-	        : m1) * 255;
-	  }
-	
-	  var deg2rad = Math.PI / 180;
-	  var rad2deg = 180 / Math.PI;
-	
-	  var Kn = 18;
-	  var Xn = 0.950470;
-	  var Yn = 1;
-	  var Zn = 1.088830;
-	  var t0 = 4 / 29;
-	  var t1 = 6 / 29;
-	  var t2 = 3 * t1 * t1;
-	  var t3 = t1 * t1 * t1;
-	  function labConvert(o) {
-	    if (o instanceof Lab) return new Lab(o.l, o.a, o.b, o.opacity);
-	    if (o instanceof Hcl) {
-	      var h = o.h * deg2rad;
-	      return new Lab(o.l, Math.cos(h) * o.c, Math.sin(h) * o.c, o.opacity);
+	    function arrayToSmall(arr) { // If BASE changes this function may need to change
+	        trim(arr);
+	        var length = arr.length;
+	        if (length < 4 && compareAbs(arr, MAX_INT_ARR) < 0) {
+	            switch (length) {
+	                case 0: return 0;
+	                case 1: return arr[0];
+	                case 2: return arr[0] + arr[1] * BASE;
+	                default: return arr[0] + (arr[1] + arr[2] * BASE) * BASE;
+	            }
+	        }
+	        return arr;
 	    }
-	    if (!(o instanceof Rgb)) o = rgbConvert(o);
-	    var b = rgb2xyz(o.r),
-	        a = rgb2xyz(o.g),
-	        l = rgb2xyz(o.b),
-	        x = xyz2lab((0.4124564 * b + 0.3575761 * a + 0.1804375 * l) / Xn),
-	        y = xyz2lab((0.2126729 * b + 0.7151522 * a + 0.0721750 * l) / Yn),
-	        z = xyz2lab((0.0193339 * b + 0.1191920 * a + 0.9503041 * l) / Zn);
-	    return new Lab(116 * y - 16, 500 * (x - y), 200 * (y - z), o.opacity);
-	  }
 	
-	  function lab(l, a, b, opacity) {
-	    return arguments.length === 1 ? labConvert(l) : new Lab(l, a, b, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Lab(l, a, b, opacity) {
-	    this.l = +l;
-	    this.a = +a;
-	    this.b = +b;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Lab, lab, extend(Color, {
-	    brighter: function(k) {
-	      return new Lab(this.l + Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
-	    },
-	    darker: function(k) {
-	      return new Lab(this.l - Kn * (k == null ? 1 : k), this.a, this.b, this.opacity);
-	    },
-	    rgb: function() {
-	      var y = (this.l + 16) / 116,
-	          x = isNaN(this.a) ? y : y + this.a / 500,
-	          z = isNaN(this.b) ? y : y - this.b / 200;
-	      y = Yn * lab2xyz(y);
-	      x = Xn * lab2xyz(x);
-	      z = Zn * lab2xyz(z);
-	      return new Rgb(
-	        xyz2rgb( 3.2404542 * x - 1.5371385 * y - 0.4985314 * z), // D65 -> sRGB
-	        xyz2rgb(-0.9692660 * x + 1.8760108 * y + 0.0415560 * z),
-	        xyz2rgb( 0.0556434 * x - 0.2040259 * y + 1.0572252 * z),
-	        this.opacity
-	      );
+	    function trim(v) {
+	        var i = v.length;
+	        while (v[--i] === 0);
+	        v.length = i + 1;
 	    }
-	  }));
 	
-	  function xyz2lab(t) {
-	    return t > t3 ? Math.pow(t, 1 / 3) : t / t2 + t0;
-	  }
-	
-	  function lab2xyz(t) {
-	    return t > t1 ? t * t * t : t2 * (t - t0);
-	  }
-	
-	  function xyz2rgb(x) {
-	    return 255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055);
-	  }
-	
-	  function rgb2xyz(x) {
-	    return (x /= 255) <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-	  }
-	
-	  function hclConvert(o) {
-	    if (o instanceof Hcl) return new Hcl(o.h, o.c, o.l, o.opacity);
-	    if (!(o instanceof Lab)) o = labConvert(o);
-	    var h = Math.atan2(o.b, o.a) * rad2deg;
-	    return new Hcl(h < 0 ? h + 360 : h, Math.sqrt(o.a * o.a + o.b * o.b), o.l, o.opacity);
-	  }
-	
-	  function hcl(h, c, l, opacity) {
-	    return arguments.length === 1 ? hclConvert(h) : new Hcl(h, c, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Hcl(h, c, l, opacity) {
-	    this.h = +h;
-	    this.c = +c;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Hcl, hcl, extend(Color, {
-	    brighter: function(k) {
-	      return new Hcl(this.h, this.c, this.l + Kn * (k == null ? 1 : k), this.opacity);
-	    },
-	    darker: function(k) {
-	      return new Hcl(this.h, this.c, this.l - Kn * (k == null ? 1 : k), this.opacity);
-	    },
-	    rgb: function() {
-	      return labConvert(this).rgb();
+	    function createArray(length) { // function shamelessly stolen from Yaffle's library https://github.com/Yaffle/BigInteger
+	        var x = new Array(length);
+	        var i = -1;
+	        while (++i < length) {
+	            x[i] = 0;
+	        }
+	        return x;
 	    }
-	  }));
 	
-	  var A = -0.14861;
-	  var B = +1.78277;
-	  var C = -0.29227;
-	  var D = -0.90649;
-	  var E = +1.97294;
-	  var ED = E * D;
-	  var EB = E * B;
-	  var BC_DA = B * C - D * A;
-	  function cubehelixConvert(o) {
-	    if (o instanceof Cubehelix) return new Cubehelix(o.h, o.s, o.l, o.opacity);
-	    if (!(o instanceof Rgb)) o = rgbConvert(o);
-	    var r = o.r / 255,
-	        g = o.g / 255,
-	        b = o.b / 255,
-	        l = (BC_DA * b + ED * r - EB * g) / (BC_DA + ED - EB),
-	        bl = b - l,
-	        k = (E * (g - l) - C * bl) / D,
-	        s = Math.sqrt(k * k + bl * bl) / (E * l * (1 - l)), // NaN if l=0 or l=1
-	        h = s ? Math.atan2(k, bl) * rad2deg - 120 : NaN;
-	    return new Cubehelix(h < 0 ? h + 360 : h, s, l, o.opacity);
-	  }
-	
-	  function cubehelix(h, s, l, opacity) {
-	    return arguments.length === 1 ? cubehelixConvert(h) : new Cubehelix(h, s, l, opacity == null ? 1 : opacity);
-	  }
-	
-	  function Cubehelix(h, s, l, opacity) {
-	    this.h = +h;
-	    this.s = +s;
-	    this.l = +l;
-	    this.opacity = +opacity;
-	  }
-	
-	  define(Cubehelix, cubehelix, extend(Color, {
-	    brighter: function(k) {
-	      k = k == null ? brighter : Math.pow(brighter, k);
-	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    darker: function(k) {
-	      k = k == null ? darker : Math.pow(darker, k);
-	      return new Cubehelix(this.h, this.s, this.l * k, this.opacity);
-	    },
-	    rgb: function() {
-	      var h = isNaN(this.h) ? 0 : (this.h + 120) * deg2rad,
-	          l = +this.l,
-	          a = isNaN(this.s) ? 0 : this.s * l * (1 - l),
-	          cosh = Math.cos(h),
-	          sinh = Math.sin(h);
-	      return new Rgb(
-	        255 * (l + a * (A * cosh + B * sinh)),
-	        255 * (l + a * (C * cosh + D * sinh)),
-	        255 * (l + a * (E * cosh)),
-	        this.opacity
-	      );
+	    function truncate(n) {
+	        if (n > 0) return Math.floor(n);
+	        return Math.ceil(n);
 	    }
-	  }));
 	
-	  var version = "0.4.2";
+	    function add(a, b) { // assumes a and b are arrays with a.length >= b.length
+	        var l_a = a.length,
+	            l_b = b.length,
+	            r = new Array(l_a),
+	            carry = 0,
+	            base = BASE,
+	            sum, i;
+	        for (i = 0; i < l_b; i++) {
+	            sum = a[i] + b[i] + carry;
+	            carry = sum >= base ? 1 : 0;
+	            r[i] = sum - carry * base;
+	        }
+	        while (i < l_a) {
+	            sum = a[i] + carry;
+	            carry = sum === base ? 1 : 0;
+	            r[i++] = sum - carry * base;
+	        }
+	        if (carry > 0) r.push(carry);
+	        return r;
+	    }
 	
-	  exports.version = version;
-	  exports.color = color;
-	  exports.rgb = rgb;
-	  exports.hsl = hsl;
-	  exports.lab = lab;
-	  exports.hcl = hcl;
-	  exports.cubehelix = cubehelix;
+	    function addAny(a, b) {
+	        if (a.length >= b.length) return add(a, b);
+	        return add(b, a);
+	    }
 	
-	}));
+	    function addSmall(a, carry) { // assumes a is array, carry is number with 0 <= carry < MAX_INT
+	        var l = a.length,
+	            r = new Array(l),
+	            base = BASE,
+	            sum, i;
+	        for (i = 0; i < l; i++) {
+	            sum = a[i] - base + carry;
+	            carry = Math.floor(sum / base);
+	            r[i] = sum - carry * base;
+	            carry += 1;
+	        }
+	        while (carry > 0) {
+	            r[i++] = carry % base;
+	            carry = Math.floor(carry / base);
+	        }
+	        return r;
+	    }
+	
+	    BigInteger.prototype.add = function (v) {
+	        var value, n = parseValue(v);
+	        if (this.sign !== n.sign) {
+	            return this.subtract(n.negate());
+	        }
+	        var a = this.value, b = n.value;
+	        if (n.isSmall) {
+	            return new BigInteger(addSmall(a, Math.abs(b)), this.sign);
+	        }
+	        return new BigInteger(addAny(a, b), this.sign);
+	    };
+	    BigInteger.prototype.plus = BigInteger.prototype.add;
+	
+	    SmallInteger.prototype.add = function (v) {
+	        var n = parseValue(v);
+	        var a = this.value;
+	        if (a < 0 !== n.sign) {
+	            return this.subtract(n.negate());
+	        }
+	        var b = n.value;
+	        if (n.isSmall) {
+	            if (isPrecise(a + b)) return new SmallInteger(a + b);
+	            b = smallToArray(Math.abs(b));
+	        }
+	        return new BigInteger(addSmall(b, Math.abs(a)), a < 0);
+	    };
+	    SmallInteger.prototype.plus = SmallInteger.prototype.add;
+	
+	    function subtract(a, b) { // assumes a and b are arrays with a >= b
+	        var a_l = a.length,
+	            b_l = b.length,
+	            r = new Array(a_l),
+	            borrow = 0,
+	            base = BASE,
+	            i, difference;
+	        for (i = 0; i < b_l; i++) {
+	            difference = a[i] - borrow - b[i];
+	            if (difference < 0) {
+	                difference += base;
+	                borrow = 1;
+	            } else borrow = 0;
+	            r[i] = difference;
+	        }
+	        for (i = b_l; i < a_l; i++) {
+	            difference = a[i] - borrow;
+	            if (difference < 0) difference += base;
+	            else {
+	                r[i++] = difference;
+	                break;
+	            }
+	            r[i] = difference;
+	        }
+	        for (; i < a_l; i++) {
+	            r[i] = a[i];
+	        }
+	        trim(r);
+	        return r;
+	    }
+	
+	    function subtractAny(a, b, sign) {
+	        var value, isSmall;
+	        if (compareAbs(a, b) >= 0) {
+	            value = subtract(a,b);
+	        } else {
+	            value = subtract(b, a);
+	            sign = !sign;
+	        }
+	        value = arrayToSmall(value);
+	        if (typeof value === "number") {
+	            if (sign) value = -value;
+	            return new SmallInteger(value);
+	        }
+	        return new BigInteger(value, sign);
+	    }
+	
+	    function subtractSmall(a, b, sign) { // assumes a is array, b is number with 0 <= b < MAX_INT
+	        var l = a.length,
+	            r = new Array(l),
+	            carry = -b,
+	            base = BASE,
+	            i, difference;
+	        for (i = 0; i < l; i++) {
+	            difference = a[i] + carry;
+	            carry = Math.floor(difference / base);
+	            r[i] = difference < 0 ? difference % base + base : difference;
+	        }
+	        r = arrayToSmall(r);
+	        if (typeof r === "number") {
+	            if (sign) r = -r;
+	            return new SmallInteger(r);
+	        } return new BigInteger(r, sign);
+	    }
+	
+	    BigInteger.prototype.subtract = function (v) {
+	        var n = parseValue(v);
+	        if (this.sign !== n.sign) {
+	            return this.add(n.negate());
+	        }
+	        var a = this.value, b = n.value;
+	        if (n.isSmall)
+	            return subtractSmall(a, Math.abs(b), this.sign);
+	        return subtractAny(a, b, this.sign);
+	    };
+	    BigInteger.prototype.minus = BigInteger.prototype.subtract;
+	
+	    SmallInteger.prototype.subtract = function (v) {
+	        var n = parseValue(v);
+	        var a = this.value;
+	        if (a < 0 !== n.sign) {
+	            return this.add(n.negate());
+	        }
+	        var b = n.value;
+	        if (n.isSmall) {
+	            return new SmallInteger(a - b);
+	        }
+	        return subtractSmall(b, Math.abs(a), a >= 0);
+	    };
+	    SmallInteger.prototype.minus = SmallInteger.prototype.subtract;
+	
+	    BigInteger.prototype.negate = function () {
+	        return new BigInteger(this.value, !this.sign);
+	    };
+	    SmallInteger.prototype.negate = function () {
+	        var sign = this.sign;
+	        var small = new SmallInteger(-this.value);
+	        small.sign = !sign;
+	        return small;
+	    };
+	
+	    BigInteger.prototype.abs = function () {
+	        return new BigInteger(this.value, false);
+	    };
+	    SmallInteger.prototype.abs = function () {
+	        return new SmallInteger(Math.abs(this.value));
+	    };
+	
+	    function multiplyLong(a, b) {
+	        var a_l = a.length,
+	            b_l = b.length,
+	            l = a_l + b_l,
+	            r = createArray(l),
+	            base = BASE,
+	            product, carry, i, a_i, b_j;
+	        for (i = 0; i < a_l; ++i) {
+	            a_i = a[i];
+	            for (var j = 0; j < b_l; ++j) {
+	                b_j = b[j];
+	                product = a_i * b_j + r[i + j];
+	                carry = Math.floor(product / base);
+	                r[i + j] = product - carry * base;
+	                r[i + j + 1] += carry;
+	            }
+	        }
+	        trim(r);
+	        return r;
+	    }
+	
+	    function multiplySmall(a, b) { // assumes a is array, b is number with |b| < BASE
+	        var l = a.length,
+	            r = new Array(l),
+	            base = BASE,
+	            carry = 0,
+	            product, i;
+	        for (i = 0; i < l; i++) {
+	            product = a[i] * b + carry;
+	            carry = Math.floor(product / base);
+	            r[i] = product - carry * base;
+	        }
+	        while (carry > 0) {
+	            r[i++] = carry % base;
+	            carry = Math.floor(carry / base);
+	        }
+	        return r;
+	    }
+	
+	    function shiftLeft(x, n) {
+	        var r = [];
+	        while (n-- > 0) r.push(0);
+	        return r.concat(x);
+	    }
+	
+	    function multiplyKaratsuba(x, y) {
+	        var n = Math.max(x.length, y.length);
+	        
+	        if (n <= 400) return multiplyLong(x, y);
+	        n = Math.ceil(n / 2);
+	
+	        var b = x.slice(n),
+	            a = x.slice(0, n),
+	            d = y.slice(n),
+	            c = y.slice(0, n);
+	
+	        var ac = multiplyKaratsuba(a, c),
+	            bd = multiplyKaratsuba(b, d),
+	            abcd = multiplyKaratsuba(addAny(a, b), addAny(c, d));
+	
+	        return addAny(addAny(ac, shiftLeft(subtract(subtract(abcd, ac), bd), n)), shiftLeft(bd, 2 * n));
+	    }
+	
+	    BigInteger.prototype.multiply = function (v) {
+	        var value, n = parseValue(v),
+	            a = this.value, b = n.value,
+	            sign = this.sign !== n.sign,
+	            abs;
+	        if (n.isSmall) {
+	            if (b === 0) return CACHE[0];
+	            if (b === 1) return this;
+	            if (b === -1) return this.negate();
+	            abs = Math.abs(b);
+	            if (abs < BASE) {
+	                return new BigInteger(multiplySmall(a, abs), sign);
+	            }
+	            b = smallToArray(abs);
+	        }
+	        if (a.length + b.length > 4000) // Karatsuba is only faster for sufficiently large inputs
+	            return new BigInteger(multiplyKaratsuba(a, b), sign);
+	        return new BigInteger(multiplyLong(a, b), sign);
+	    };
+	
+	    BigInteger.prototype.times = BigInteger.prototype.multiply;
+	
+	    function multiplySmallAndArray(a, b, sign) { // a >= 0
+	        if (a < BASE) {
+	            return new BigInteger(multiplySmall(b, a), sign);
+	        }
+	        return new BigInteger(multiplyLong(b, smallToArray(a)), sign);
+	    }
+	    SmallInteger.prototype["_multiplyBySmall"] = function (a) {
+	            if (isPrecise(a.value * this.value)) {
+	                return new SmallInteger(a.value * this.value);
+	            }
+	            return multiplySmallAndArray(Math.abs(a.value), smallToArray(Math.abs(this.value)), this.sign !== a.sign);
+	    };
+	    BigInteger.prototype["_multiplyBySmall"] = function (a) {
+	            if (a.value === 0) return CACHE[0];
+	            if (a.value === 1) return this;
+	            if (a.value === -1) return this.negate();
+	            return multiplySmallAndArray(Math.abs(a.value), this.value, this.sign !== a.sign);
+	    };
+	    SmallInteger.prototype.multiply = function (v) {
+	        return parseValue(v)["_multiplyBySmall"](this);
+	    };
+	    SmallInteger.prototype.times = SmallInteger.prototype.multiply;
+	
+	    function square(a) {
+	        var l = a.length,
+	            r = createArray(l + l),
+	            base = BASE,
+	            product, carry, i, a_i, a_j;
+	        for (i = 0; i < l; i++) {
+	            a_i = a[i];
+	            for (var j = 0; j < l; j++) {
+	                a_j = a[j];
+	                product = a_i * a_j + r[i + j];
+	                carry = Math.floor(product / base);
+	                r[i + j] = product - carry * base;
+	                r[i + j + 1] += carry;
+	            }
+	        }
+	        trim(r);
+	        return r;
+	    }
+	
+	    BigInteger.prototype.square = function () {
+	        return new BigInteger(square(this.value), false);
+	    };
+	
+	    SmallInteger.prototype.square = function () {
+	        var value = this.value * this.value;
+	        if (isPrecise(value)) return new SmallInteger(value);
+	        return new BigInteger(square(smallToArray(Math.abs(this.value))), false);
+	    };
+	
+	    function divMod1(a, b) { // Left over from previous version. Performs faster than divMod2 on smaller input sizes.
+	        var a_l = a.length,
+	            b_l = b.length,
+	            base = BASE,
+	            result = createArray(b.length),
+	            divisorMostSignificantDigit = b[b_l - 1],
+	            // normalization
+	            lambda = Math.ceil(base / (2 * divisorMostSignificantDigit)),
+	            remainder = multiplySmall(a, lambda),
+	            divisor = multiplySmall(b, lambda),
+	            quotientDigit, shift, carry, borrow, i, l, q;
+	        if (remainder.length <= a_l) remainder.push(0);
+	        divisor.push(0);
+	        divisorMostSignificantDigit = divisor[b_l - 1];
+	        for (shift = a_l - b_l; shift >= 0; shift--) {
+	            quotientDigit = base - 1;
+	            quotientDigit = Math.floor((remainder[shift + b_l] * base + remainder[shift + b_l - 1]) / divisorMostSignificantDigit);
+	            carry = 0;
+	            borrow = 0;
+	            l = divisor.length;
+	            for (i = 0; i < l; i++) {
+	                carry += quotientDigit * divisor[i];
+	                q = Math.floor(carry / base);
+	                borrow += remainder[shift + i] - (carry - q * base);
+	                carry = q;
+	                if (borrow < 0) {
+	                    remainder[shift + i] = borrow + base;
+	                    borrow = -1;
+	                } else {
+	                    remainder[shift + i] = borrow;
+	                    borrow = 0;
+	                }
+	            }
+	            while (borrow !== 0) {
+	                quotientDigit -= 1;
+	                carry = 0;
+	                for (i = 0; i < l; i++) {
+	                    carry += remainder[shift + i] - base + divisor[i];
+	                    if (carry < 0) {
+	                        remainder[shift + i] = carry + base;
+	                        carry = 0;
+	                    } else {
+	                        remainder[shift + i] = carry;
+	                        carry = 1;
+	                    }
+	                }
+	                borrow += carry;
+	            }
+	            result[shift] = quotientDigit;
+	        }
+	        // denormalization
+	        remainder = divModSmall(remainder, lambda)[0];
+	        return [arrayToSmall(result), arrayToSmall(remainder)];
+	    }
+	
+	    function divMod2(a, b) { // Implementation idea shamelessly stolen from Silent Matt's library http://silentmatt.com/biginteger/
+	        // Performs faster than divMod1 on larger input sizes.
+	        var a_l = a.length,
+	            b_l = b.length,
+	            result = [],
+	            part = [],
+	            base = BASE,
+	            guess, xlen, highx, highy, check;
+	        while (a_l) {
+	            part.unshift(a[--a_l]);
+	            if (compareAbs(part, b) < 0) {
+	                result.push(0);
+	                continue;
+	            }
+	            xlen = part.length;
+	            highx = part[xlen - 1] * base + part[xlen - 2];
+	            highy = b[b_l - 1] * base + b[b_l - 2];
+	            if (xlen > b_l) {
+	                highx = (highx + 1) * base;
+	            }
+	            guess = Math.ceil(highx / highy);
+	            do {
+	                check = multiplySmall(b, guess);
+	                if (compareAbs(check, part) <= 0) break;
+	                guess--;
+	            } while (guess);
+	            result.push(guess);
+	            part = subtract(part, check);
+	        }
+	        result.reverse();
+	        return [arrayToSmall(result), arrayToSmall(part)];
+	    }
+	
+	    function divModSmall(value, lambda) {
+	        var length = value.length,
+	            quotient = createArray(length),
+	            base = BASE,
+	            i, q, remainder, divisor;
+	        remainder = 0;
+	        for (i = length - 1; i >= 0; --i) {
+	            divisor = remainder * base + value[i];
+	            q = truncate(divisor / lambda);
+	            remainder = divisor - q * lambda;
+	            quotient[i] = q | 0;
+	        }
+	        return [quotient, remainder | 0];
+	    }
+	
+	    function divModAny(self, v) {
+	        var value, n = parseValue(v);
+	        var a = self.value, b = n.value;
+	        var quotient;
+	        if (b === 0) throw new Error("Cannot divide by zero");
+	        if (self.isSmall) {
+	            if (n.isSmall) {
+	                return [new SmallInteger(truncate(a / b)), new SmallInteger(a % b)];
+	            }
+	            return [CACHE[0], self];
+	        }
+	        if (n.isSmall) {
+	            if (b === 1) return [self, CACHE[0]];
+	            if (b == -1) return [self.negate(), CACHE[0]];
+	            var abs = Math.abs(b);
+	            if (abs < BASE) {
+	                value = divModSmall(a, abs);
+	                quotient = arrayToSmall(value[0]);
+	                var remainder = value[1];
+	                if (self.sign) remainder = -remainder;
+	                if (typeof quotient === "number") {
+	                    if (self.sign !== n.sign) quotient = -quotient;
+	                    return [new SmallInteger(quotient), new SmallInteger(remainder)];
+	                }
+	                return [new BigInteger(quotient, self.sign !== n.sign), new SmallInteger(remainder)];
+	            }
+	            b = smallToArray(abs);
+	        }
+	        var comparison = compareAbs(a, b);
+	        if (comparison === -1) return [CACHE[0], self];
+	        if (comparison === 0) return [CACHE[self.sign === n.sign ? 1 : -1], CACHE[0]];
+	
+	        // divMod1 is faster on smaller input sizes
+	        if (a.length + b.length <= 200)
+	            value = divMod1(a, b);
+	        else value = divMod2(a, b);
+	
+	        quotient = value[0];
+	        var qSign = self.sign !== n.sign,
+	            mod = value[1],
+	            mSign = self.sign;
+	        if (typeof quotient === "number") {
+	            if (qSign) quotient = -quotient;
+	            quotient = new SmallInteger(quotient);
+	        } else quotient = new BigInteger(quotient, qSign);
+	        if (typeof mod === "number") {
+	            if (mSign) mod = -mod;
+	            mod = new SmallInteger(mod);
+	        } else mod = new BigInteger(mod, mSign);
+	        return [quotient, mod];
+	    }
+	
+	    BigInteger.prototype.divmod = function (v) {
+	        var result = divModAny(this, v);
+	        return {
+	            quotient: result[0],
+	            remainder: result[1]
+	        };
+	    };
+	    SmallInteger.prototype.divmod = BigInteger.prototype.divmod;
+	
+	    BigInteger.prototype.divide = function (v) {
+	        return divModAny(this, v)[0];
+	    };
+	    SmallInteger.prototype.over = SmallInteger.prototype.divide = BigInteger.prototype.over = BigInteger.prototype.divide;
+	
+	    BigInteger.prototype.mod = function (v) {
+	        return divModAny(this, v)[1];
+	    };
+	    SmallInteger.prototype.remainder = SmallInteger.prototype.mod = BigInteger.prototype.remainder = BigInteger.prototype.mod;
+	
+	    BigInteger.prototype.pow = function (v) {
+	        var n = parseValue(v),
+	            a = this.value,
+	            b = n.value,
+	            value, x, y;
+	        if (b === 0) return CACHE[1];
+	        if (a === 0) return CACHE[0];
+	        if (a === 1) return CACHE[1];
+	        if (a === -1) return n.isEven() ? CACHE[1] : CACHE[-1];
+	        if (n.sign) {
+	            return CACHE[0];
+	        }
+	        if (!n.isSmall) throw new Error("The exponent " + n.toString() + " is too large.");
+	        if (this.isSmall) {
+	            if (isPrecise(value = Math.pow(a, b)))
+	                return new SmallInteger(truncate(value));
+	        }
+	        x = this;
+	        y = CACHE[1];
+	        while (true) {
+	            if (b & 1 === 1) {
+	                y = y.times(x);
+	                --b;
+	            }
+	            if (b === 0) break;
+	            b /= 2;
+	            x = x.square();
+	        }
+	        return y;
+	    };
+	    SmallInteger.prototype.pow = BigInteger.prototype.pow;
+	
+	    BigInteger.prototype.modPow = function (exp, mod) {
+	        exp = parseValue(exp);
+	        mod = parseValue(mod);
+	        if (mod.isZero()) throw new Error("Cannot take modPow with modulus 0");
+	        var r = CACHE[1],
+	            base = this.mod(mod);
+	        if (base.isZero()) return CACHE[0];
+	        while (exp.isPositive()) {
+	            if (exp.isOdd()) r = r.multiply(base).mod(mod);
+	            exp = exp.divide(2);
+	            base = base.square().mod(mod);
+	        }
+	        return r;
+	    };
+	    SmallInteger.prototype.modPow = BigInteger.prototype.modPow;
+	
+	    function compareAbs(a, b) {
+	        if (a.length !== b.length) {
+	            return a.length > b.length ? 1 : -1;
+	        }
+	        for (var i = a.length - 1; i >= 0; i--) {
+	            if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1;
+	        }
+	        return 0;
+	    }
+	
+	    BigInteger.prototype.compareAbs = function (v) {
+	        var n = parseValue(v),
+	            a = this.value,
+	            b = n.value;
+	        if (n.isSmall) return 1;
+	        return compareAbs(a, b);
+	    };
+	    SmallInteger.prototype.compareAbs = function (v) {
+	        var n = parseValue(v),
+	            a = Math.abs(this.value),
+	            b = n.value;
+	        if (n.isSmall) {
+	            b = Math.abs(b);
+	            return a === b ? 0 : a > b ? 1 : -1;
+	        }
+	        return -1;
+	    };
+	
+	    BigInteger.prototype.compare = function (v) {
+	        var n = parseValue(v),
+	            a = this.value,
+	            b = n.value;
+	        if (this.sign !== n.sign) {
+	            return n.sign ? 1 : -1;
+	        }
+	        if (n.isSmall) {
+	            return this.sign ? -1 : 1;
+	        }
+	        return compareAbs(a, b) * (this.sign ? -1 : 1);
+	    };
+	    BigInteger.prototype.compareTo = BigInteger.prototype.compare;
+	
+	    SmallInteger.prototype.compare = function (v) {
+	        var n = parseValue(v),
+	            a = this.value,
+	            b = n.value;
+	        if (n.isSmall) {
+	            return a == b ? 0 : a > b ? 1 : -1;
+	        }
+	        if (a < 0 !== n.sign) {
+	            return a < 0 ? -1 : 1;
+	        }
+	        return a < 0 ? 1 : -1;
+	    };
+	    SmallInteger.prototype.compareTo = SmallInteger.prototype.compare;
+	
+	    BigInteger.prototype.equals = function (v) {
+	        return this.compare(v) === 0;
+	    };
+	    SmallInteger.prototype.eq = SmallInteger.prototype.equals = BigInteger.prototype.eq = BigInteger.prototype.equals;
+	
+	    BigInteger.prototype.notEquals = function (v) {
+	        return this.compare(v) !== 0;
+	    };
+	    SmallInteger.prototype.neq = SmallInteger.prototype.notEquals = BigInteger.prototype.neq = BigInteger.prototype.notEquals;
+	
+	    BigInteger.prototype.greater = function (v) {
+	        return this.compare(v) > 0;
+	    };
+	    SmallInteger.prototype.gt = SmallInteger.prototype.greater = BigInteger.prototype.gt = BigInteger.prototype.greater;
+	
+	    BigInteger.prototype.lesser = function (v) {
+	        return this.compare(v) < 0;
+	    };
+	    SmallInteger.prototype.lt = SmallInteger.prototype.lesser = BigInteger.prototype.lt = BigInteger.prototype.lesser;
+	
+	    BigInteger.prototype.greaterOrEquals = function (v) {
+	        return this.compare(v) >= 0;
+	    };
+	    SmallInteger.prototype.geq = SmallInteger.prototype.greaterOrEquals = BigInteger.prototype.geq = BigInteger.prototype.greaterOrEquals;
+	
+	    BigInteger.prototype.lesserOrEquals = function (v) {
+	        return this.compare(v) <= 0;
+	    };
+	    SmallInteger.prototype.leq = SmallInteger.prototype.lesserOrEquals = BigInteger.prototype.leq = BigInteger.prototype.lesserOrEquals;
+	
+	    BigInteger.prototype.isEven = function () {
+	        return (this.value[0] & 1) === 0;
+	    };
+	    SmallInteger.prototype.isEven = function () {
+	        return (this.value & 1) === 0;
+	    };
+	
+	    BigInteger.prototype.isOdd = function () {
+	        return (this.value[0] & 1) === 1;
+	    };
+	    SmallInteger.prototype.isOdd = function () {
+	        return (this.value & 1) === 1;
+	    };
+	
+	    BigInteger.prototype.isPositive = function () {
+	        return !this.sign;
+	    };
+	    SmallInteger.prototype.isPositive = function () {
+	        return this.value > 0;
+	    };
+	
+	    BigInteger.prototype.isNegative = function () {
+	        return this.sign;
+	    };
+	    SmallInteger.prototype.isNegative = function () {
+	        return this.value < 0;
+	    };
+	
+	    BigInteger.prototype.isUnit = function () {
+	        return false;
+	    };
+	    SmallInteger.prototype.isUnit = function () {
+	        return Math.abs(this.value) === 1;
+	    };
+	
+	    BigInteger.prototype.isZero = function () {
+	        return false;
+	    };
+	    SmallInteger.prototype.isZero = function () {
+	        return this.value === 0;
+	    };
+	    BigInteger.prototype.isDivisibleBy = function (v) {
+	        var n = parseValue(v);
+	        var value = n.value;
+	        if (value === 0) return false;
+	        if (value === 1) return true;
+	        if (value === 2) return this.isEven();
+	        return this.mod(n).equals(CACHE[0]);
+	    };
+	    SmallInteger.prototype.isDivisibleBy = BigInteger.prototype.isDivisibleBy;
+	
+	    BigInteger.prototype.isPrime = function () {
+	        var n = this.abs(),
+	            nPrev = n.prev();
+	        if (n.isUnit()) return false;
+	        if (n.equals(2) || n.equals(3) || n.equals(5)) return true;
+	        if (n.isEven() || n.isDivisibleBy(3) || n.isDivisibleBy(5)) return false;
+	        if (n.lesser(25)) return true;
+	        var a = [2, 3, 5, 7, 11, 13, 17, 19],
+	            b = nPrev,
+	            d, t, i, x;
+	        while (b.isEven()) b = b.divide(2);
+	        for (i = 0; i < a.length; i++) {
+	            x = bigInt(a[i]).modPow(b, n);
+	            if (x.equals(CACHE[1]) || x.equals(nPrev)) continue;
+	            for (t = true, d = b; t && d.lesser(nPrev) ; d = d.multiply(2)) {
+	                x = x.square().mod(n);
+	                if (x.equals(nPrev)) t = false;
+	            }
+	            if (t) return false;
+	        }
+	        return true;
+	    };
+	    SmallInteger.prototype.isPrime = BigInteger.prototype.isPrime;
+	
+	    BigInteger.prototype.next = function () {
+	        var value = this.value;
+	        if (this.sign) {
+	            return subtractSmall(value, 1, this.sign);
+	        }
+	        return new BigInteger(addSmall(value, 1), this.sign);
+	    };
+	    SmallInteger.prototype.next = function () {
+	        var value = this.value;
+	        if (value + 1 < MAX_INT) return new SmallInteger(value + 1);
+	        return new BigInteger(MAX_INT_ARR, false);
+	    };
+	
+	    BigInteger.prototype.prev = function () {
+	        var value = this.value;
+	        if (this.sign) {
+	            return new BigInteger(addSmall(value, 1), true);
+	        }
+	        return subtractSmall(value, 1, this.sign);
+	    };
+	    SmallInteger.prototype.prev = function () {
+	        var value = this.value;
+	        if (value - 1 > -MAX_INT) return new SmallInteger(value - 1);
+	        return new BigInteger(MAX_INT_ARR, true);
+	    };
+	
+	    var powersOfTwo = [1];
+	    while (powersOfTwo[powersOfTwo.length - 1] <= BASE) powersOfTwo.push(2 * powersOfTwo[powersOfTwo.length - 1]);
+	    var powers2Length = powersOfTwo.length, highestPower2 = powersOfTwo[powers2Length - 1];
+	
+	    function shift_isSmall(n) {
+	        return ((typeof n === "number" || typeof n === "string") && +Math.abs(n) <= BASE) ||
+	            (n instanceof BigInteger && n.value.length <= 1);
+	    }
+	
+	    BigInteger.prototype.shiftLeft = function (n) {
+	        if (!shift_isSmall(n)) {
+	            if (n.isNegative()) return this.shiftRight(n.abs());
+	            return this.times(CACHE[2].pow(n));
+	        }
+	        n = +n;
+	        if (n < 0) return this.shiftRight(-n);
+	        var result = this;
+	        while (n >= powers2Length) {
+	            result = result.multiply(highestPower2);
+	            n -= powers2Length - 1;
+	        }
+	        return result.multiply(powersOfTwo[n]);
+	    };
+	    SmallInteger.prototype.shiftLeft = BigInteger.prototype.shiftLeft;
+	
+	    BigInteger.prototype.shiftRight = function (n) {
+	        var remQuo;
+	        if (!shift_isSmall(n)) {
+	            if (n.isNegative()) return this.shiftLeft(n.abs());
+	            remQuo = this.divmod(CACHE[2].pow(n));
+	            return remQuo.remainder.isNegative() ? remQuo.quotient.prev() : remQuo.quotient;
+	        }
+	        n = +n;
+	        if (n < 0) return this.shiftLeft(-n);
+	        var result = this;
+	        while (n >= powers2Length) {
+	            if (result.isZero()) return result;
+	            remQuo = divModAny(result, highestPower2);
+	            result = remQuo[1].isNegative() ? remQuo[0].prev() : remQuo[0];
+	            n -= powers2Length - 1;
+	        }
+	        remQuo = divModAny(result, powersOfTwo[n]);
+	        return remQuo[1].isNegative() ? remQuo[0].prev() : remQuo[0];
+	    };
+	    SmallInteger.prototype.shiftRight = BigInteger.prototype.shiftRight;
+	
+	    function bitwise(x, y, fn) {
+	        y = parseValue(y);
+	        var xSign = x.isNegative(), ySign = y.isNegative();
+	        var xRem = xSign ? x.not() : x,
+	            yRem = ySign ? y.not() : y;
+	        var xBits = [], yBits = [];
+	        var xStop = false, yStop = false;
+	        while (!xStop || !yStop) {
+	            if (xRem.isZero()) { // virtual sign extension for simulating two's complement
+	                xStop = true;
+	                xBits.push(xSign ? 1 : 0);
+	            }
+	            else if (xSign) xBits.push(xRem.isEven() ? 1 : 0); // two's complement for negative numbers
+	            else xBits.push(xRem.isEven() ? 0 : 1);
+	
+	            if (yRem.isZero()) {
+	                yStop = true;
+	                yBits.push(ySign ? 1 : 0);
+	            }
+	            else if (ySign) yBits.push(yRem.isEven() ? 1 : 0);
+	            else yBits.push(yRem.isEven() ? 0 : 1);
+	
+	            xRem = xRem.over(2);
+	            yRem = yRem.over(2);
+	        }
+	        var result = [];
+	        for (var i = 0; i < xBits.length; i++) result.push(fn(xBits[i], yBits[i]));
+	        var sum = bigInt(result.pop()).negate().times(bigInt(2).pow(result.length));
+	        while (result.length) {
+	            sum = sum.add(bigInt(result.pop()).times(bigInt(2).pow(result.length)));
+	        }
+	        return sum;
+	    }
+	
+	    BigInteger.prototype.not = function () {
+	        return this.negate().prev();
+	    };
+	    SmallInteger.prototype.not = BigInteger.prototype.not;
+	
+	    BigInteger.prototype.and = function (n) {
+	        return bitwise(this, n, function (a, b) { return a & b; });
+	    };
+	    SmallInteger.prototype.and = BigInteger.prototype.and;
+	
+	    BigInteger.prototype.or = function (n) {
+	        return bitwise(this, n, function (a, b) { return a | b; });
+	    };
+	    SmallInteger.prototype.or = BigInteger.prototype.or;
+	
+	    BigInteger.prototype.xor = function (n) {
+	        return bitwise(this, n, function (a, b) { return a ^ b; });
+	    };
+	    SmallInteger.prototype.xor = BigInteger.prototype.xor;
+	
+	    function max(a, b) {
+	        a = parseValue(a);
+	        b = parseValue(b);
+	        return a.greater(b) ? a : b;
+	    }
+	    function min(a,b) {
+	        a = parseValue(a);
+	        b = parseValue(b);
+	        return a.lesser(b) ? a : b;
+	    }
+	    function gcd(a, b) {
+	        a = parseValue(a).abs();
+	        b = parseValue(b).abs();
+	        if (a.equals(b)) return a;
+	        if (a.isZero()) return b;
+	        if (b.isZero()) return a;
+	        if (a.isEven()) {
+	            if (b.isOdd()) {
+	                return gcd(a.divide(2), b);
+	            }
+	            return gcd(a.divide(2), b.divide(2)).multiply(2);
+	        }
+	        if (b.isEven()) {
+	            return gcd(a, b.divide(2));
+	        }
+	        if (a.greater(b)) {
+	            return gcd(a.subtract(b).divide(2), b);
+	        }
+	        return gcd(b.subtract(a).divide(2), a);
+	    }
+	    function lcm(a, b) {
+	        a = parseValue(a).abs();
+	        b = parseValue(b).abs();
+	        return a.multiply(b).divide(gcd(a, b));
+	    }
+	    function randBetween(a, b) {
+	        a = parseValue(a);
+	        b = parseValue(b);
+	        var low = min(a, b), high = max(a, b);
+	        var range = high.subtract(low);
+	        if (range.isSmall) return low.add(Math.random() * range);
+	        var length = range.value.length - 1;
+	        var result = [], restricted = true;
+	        for (var i = length; i >= 0; i--) {
+	            var top = restricted ? range.value[i] : BASE;
+	            var digit = truncate(Math.random() * top);
+	            result.unshift(digit);
+	            if (digit < top) restricted = false;
+	        }
+	        result = arrayToSmall(result);
+	        return low.add(new BigInteger(result, false, typeof result === "number"));
+	    }
+	    var parseBase = function (text, base) {
+	        var val = CACHE[0], pow = CACHE[1],
+	            length = text.length;
+	        if (2 <= base && base <= 36) {
+	            if (length <= LOG_MAX_INT / Math.log(base)) {
+	                return new SmallInteger(parseInt(text, base));
+	            }
+	        }
+	        base = parseValue(base);
+	        var digits = [];
+	        var i;
+	        var isNegative = text[0] === "-";
+	        for (i = isNegative ? 1 : 0; i < text.length; i++) {
+	            var c = text[i].toLowerCase(),
+	                charCode = c.charCodeAt(0);
+	            if (48 <= charCode && charCode <= 57) digits.push(parseValue(c));
+	            else if (97 <= charCode && charCode <= 122) digits.push(parseValue(c.charCodeAt(0) - 87));
+	            else if (c === "<") {
+	                var start = i;
+	                do { i++; } while (text[i] !== ">");
+	                digits.push(parseValue(text.slice(start + 1, i)));
+	            }
+	            else throw new Error(c + " is not a valid character");
+	        }
+	        digits.reverse();
+	        for (i = 0; i < digits.length; i++) {
+	            val = val.add(digits[i].times(pow));
+	            pow = pow.times(base);
+	        }
+	        return isNegative ? val.negate() : val;
+	    };
+	
+	    function stringify(digit) {
+	        var v = digit.value;
+	        if (typeof v === "number") v = [v];
+	        if (v.length === 1 && v[0] <= 36) {
+	            return "0123456789abcdefghijklmnopqrstuvwxyz".charAt(v[0]);
+	        }
+	        return "<" + v + ">";
+	    }
+	    function toBase(n, base) {
+	        base = bigInt(base);
+	        if (base.isZero()) {
+	            if (n.isZero()) return "0";
+	            throw new Error("Cannot convert nonzero numbers to base 0.");
+	        }
+	        if (base.equals(-1)) {
+	            if (n.isZero()) return "0";
+	            if (n.isNegative()) return new Array(1 - n).join("10");
+	            return "1" + new Array(+n).join("01");
+	        }
+	        var minusSign = "";
+	        if (n.isNegative() && base.isPositive()) {
+	            minusSign = "-";
+	            n = n.abs();
+	        }
+	        if (base.equals(1)) {
+	            if (n.isZero()) return "0";
+	            return minusSign + new Array(+n + 1).join(1);
+	        }
+	        var out = [];
+	        var left = n, divmod;
+	        while (left.isNegative() || left.compareAbs(base) >= 0) {
+	            divmod = left.divmod(base);
+	            left = divmod.quotient;
+	            var digit = divmod.remainder;
+	            if (digit.isNegative()) {
+	                digit = base.minus(digit).abs();
+	                left = left.next();
+	            }
+	            out.push(stringify(digit));
+	        }
+	        out.push(stringify(left));
+	        return minusSign + out.reverse().join("");
+	    }
+	
+	    BigInteger.prototype.toString = function (radix) {
+	        if (radix === undefined) radix = 10;
+	        if (radix !== 10) return toBase(this, radix);
+	        var v = this.value, l = v.length, str = String(v[--l]), zeros = "0000000", digit;
+	        while (--l >= 0) {
+	            digit = String(v[l]);
+	            str += zeros.slice(digit.length) + digit;
+	        }
+	        var sign = this.sign ? "-" : "";
+	        return sign + str;
+	    };
+	    SmallInteger.prototype.toString = function (radix) {
+	        if (radix === undefined) radix = 10;
+	        if (radix != 10) return toBase(this, radix);
+	        return String(this.value);
+	    };
+	
+	    BigInteger.prototype.valueOf = function () {
+	        return +this.toString();
+	    };
+	    BigInteger.prototype.toJSNumber = BigInteger.prototype.valueOf;
+	
+	    SmallInteger.prototype.valueOf = function () {
+	        return this.value;
+	    };
+	    SmallInteger.prototype.toJSNumber = SmallInteger.prototype.valueOf;
+	    
+	    function parseStringValue(v) {
+	            if (isPrecise(+v)) {
+	                var x = +v;
+	                if (x === truncate(x))
+	                    return new SmallInteger(x);
+	                throw "Invalid integer: " + v;
+	            }
+	            var sign = v[0] === "-";
+	            if (sign) v = v.slice(1);
+	            var split = v.split(/e/i);
+	            if (split.length > 2) throw new Error("Invalid integer: " + text.join("e"));
+	            if (split.length === 2) {
+	                var exp = split[1];
+	                if (exp[0] === "+") exp = exp.slice(1);
+	                exp = +exp;
+	                if (exp !== truncate(exp) || !isPrecise(exp)) throw new Error("Invalid integer: " + exp + " is not a valid exponent.");
+	                var text = split[0];
+	                var decimalPlace = text.indexOf(".");
+	                if (decimalPlace >= 0) {
+	                    exp -= text.length - decimalPlace;
+	                    text = text.slice(0, decimalPlace) + text.slice(decimalPlace + 1);
+	                }
+	                if (exp < 0) throw new Error("Cannot include negative exponent part for integers");
+	                text += (new Array(exp + 1)).join("0");
+	                v = text;
+	            }
+	            var isValid = /^([0-9][0-9]*)$/.test(v);
+	            if (!isValid) throw new Error("Invalid integer: " + v);
+	            var r = [], max = v.length, l = LOG_BASE, min = max - l;
+	            while (max > 0) {
+	                r.push(+v.slice(min, max));
+	                min -= l;
+	                if (min < 0) min = 0;
+	                max -= l;
+	            }
+	            trim(r);
+	            return new BigInteger(r, sign);
+	    }
+	    
+	    function parseNumberValue(v) {
+	            if (isPrecise(v)) return new SmallInteger(v);
+	            return parseStringValue(v.toString());
+	    }
+	
+	    function parseValue(v) {
+	        if (typeof v === "number") {
+	            return parseNumberValue(v);
+	        }
+	        if (typeof v === "string") {
+	            return parseStringValue(v);
+	        }
+	        return v;
+	    }
+	    // Pre-define numbers in range [-999,999]
+	    var CACHE = function (v, radix) {
+	        if (typeof v === "undefined") return CACHE[0];
+	        if (typeof radix !== "undefined") return +radix === 10 ? parseValue(v) : parseBase(v, radix);
+	        return parseValue(v);
+	    };
+	    for (var i = 0; i < 1000; i++) {
+	        CACHE[i] = new SmallInteger(i);
+	        if (i > 0) CACHE[-i] = new SmallInteger(-i);
+	    }
+	    // Backwards compatibility
+	    CACHE.one = CACHE[1];
+	    CACHE.zero = CACHE[0];
+	    CACHE.minusOne = CACHE[-1];
+	    CACHE.max = max;
+	    CACHE.min = min;
+	    CACHE.gcd = gcd;
+	    CACHE.lcm = lcm;
+	    CACHE.isInstance = function (x) { return x instanceof BigInteger || x instanceof SmallInteger; };
+	    CACHE.randBetween = randBetween;
+	    return CACHE;
+	})();
+	
+	// Node.js check
+	if (typeof module !== "undefined" && module.hasOwnProperty("exports")) {
+	    module.exports = bigInt;
+	}
+	
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(22)(module)))
 
 /***/ }
 /******/ ])
