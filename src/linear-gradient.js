@@ -1,37 +1,59 @@
 import {interpolateLab} from 'd3-interpolate';
 import {scaleLinear} from 'd3-scale';
 import {rgb} from 'd3-color';
+import bigRat from 'big-rational';
+import {parseGradientObject} from './linear-gradient-parser';
 
-var LinearGradient = function (range, options) {
-  if (typeof range == 'object' && range.hasOwnProperty('colorRange')) {
-    for (var prop in range) {
-      if (range.hasOwnProperty(prop)) {
-        this[prop] = range[prop];
-      }
-    }
-  } else {
-    this.colorRange = range;
-  }
-  // patse options from obkect in array
-  var last = range[range.length -1];
-  if (range.length > 1 && typeof last == 'object' && !Array.isArray(last)) {
-    for (var prop in last) {
-      if (last.hasOwnProperty(prop)) {
-        if(this[prop] !== undefined) console.info('overiding options',this[prop], last[prop]);
-        this[prop] = last[prop];
-      }
-    }
-  }
+const HARDSTEPLIMIT = 65535;
 
-  for (var prop in options) {
-    if (options.hasOwnProperty(prop)) {
-      if(this[prop] !== undefined) console.info('overiding options',this[prop], options[prop]);
-      this[prop] = options[prop];
-    }
-  }
-  this.colorRange = parseRange(this.colorRange, this);
+var LinearGradient = function (obj, options) {
+  this.segments = setWidths(parseGradientObject(_.cloneDeep(obj)));
+  this.name = options.name || obj.name;
+  this.selected = options.selected || obj.selected;
+  this.optimize = options.optimize || obj.optimize;
 };
-LinearGradient.prototype.style = 'continuous';
+
+LinearGradient.prototype.name = 'Unnamed Linear Gradient';
+LinearGradient.prototype.selected = false;
+LinearGradient.prototype.optimize = false;
+
+function setWidths(segments) {
+  if (segments) {
+    return distributeUndeclaredWidths(
+      collectDeclaredWidths(segments)
+    )}
+    else {return false;
+  }
+}
+
+function collectDeclaredWidths(segments) {
+  var sum = 0;
+  var count = 0;
+  segments.forEach(function (r) {
+    if (!isNaN(r.width)) {
+      sum += r.width;
+      count += 1;
+    }
+  });
+  return {
+    segments: segments,
+    sum: sum,
+    count: count
+  };
+}
+
+function distributeUndeclaredWidths(o) {
+  var segments = o.segments;
+  let l = segments.length - o.count;
+  let width = (1 - o.sum) / l;
+  segments.forEach(function (r, i) {
+    if (isNaN(r.width) || r.width === undefined) {
+      segments[i].width = width;
+    }
+  });
+  //console.log('distribute',o,segments);
+  return segments;
+}
 
 function fillColorScale(range, steps) {
   if (range.length >= 2) {
@@ -55,198 +77,141 @@ function fillColorScale(range, steps) {
   }
 }
 
-function collectStrings(arr) {
-  var arrOfArr = [];
-  var current = [];
-  arr.forEach(function (r) {
-    if (Array.isArray(r)) {
-      if (current.length > 0) arrOfArr.push(current);
-      current = [];
-      arrOfArr.push(r);
-    } else if (typeof r === 'string') {
-      current.push(r);
-    }
-  });
-  if (current.length > 0) arrOfArr.push(current);
-  return arrOfArr;
+function ggt(m, n) {
+  if (n == 0)
+    return m;
+  else
+    return ggt(n, m % n);
 }
 
-function collectDeclaredWidths(arr) {
-  let width = 0;
-  let count = 0;
-  arr.forEach(function (r) {
-    if (
-      Array.isArray(r[0]) &&
-      typeof r[1] === 'number' &&
-      r[1] > 0 &&
-      r[1] <= 1
-    ) {
-      width += r[1];
-      count += 1;
-    }
-  });
-  return {
-    width: width,
-    count: count
-  };
+function kgv(m, n) {
+  o = ggt(m, n);
+  p = (m * n) / o;
+  return p;
 }
 
-function distributeUndeclaredWidths(arr, reserved) {
-  let l = arr.length - reserved.count;
-  let remainder = 1 - reserved.width;
-  var lastRemainder, lastUndeclared;
-  let width = remainder / l;
+function rationalize(rational, epsilon) {
+  var denominator = 0;
+  var numerator;
+  var error;
 
-  arr.forEach(function (r, i) {
-    if (!(
-        Array.isArray(r[0]) && typeof r[1] === 'number' &&
-        r[1] > 0 &&
-        r[1] <= 1
-      )) {
-      lastRemainder = remainder;
-      lastUndeclared = arr[i];
-      remainder -= width;
-      arr[i] = [r, width];
-    }
-  });
-  if (remainder !== 0) {
-    lastUndeclared = lastRemainder;
-  }
-  return arr;
+  do {
+    denominator++;
+    numerator = Math.round((rational.numerator * denominator) / rational.denominator);
+    error = Math.abs(rational.minus(numerator / denominator));
+  } while (error > epsilon);
+  return bigRat(numerator, denominator);
 }
 
-function dropNarrowRanges(normalized) {
-  var rInput = normalized.range.slice();
-  var ranges = [];
-  var dropped = [];
-  var minimum = 1 / normalized.steps;
-  rInput.forEach(function (r, i) {
-    if (r[1] < minimum) {
-      // redistribute
-      if (i === 0) {
-        rInput[i + 1][1] += r[1];
-      } else if (i === rInput.length - 1) {
-        ranges[ranges.length - 1][1] += r[1];
-      } else {
-        ranges[ranges.length - 1][1] += r[1] / 2;
-        rInput[i + 1][1] += r[1] / 2;
-      }
-      dropped.push(r);
-      //normalized.steps -= r[0].length;
-    } else {
-      ranges.push(r);
-    }
-  });
-
-  var iterate = 0;
-  ranges.forEach(function (r) {
-    if (r[1] < minimum) {
-      iterate++
-    }
-  });
-
-  if (dropped.length > 0) {
-    console.log('iterate', iterate);
-    console.log('dropped', dropped);
-  }
-
-  normalized.range = ranges;
-
-  if (iterate > 0) {
-    normalized = dropNarrowRanges(normalized);
-  }
-
-  return normalized;
-}
-
-function padOutSingleMemberArrays(range) {
-  range.forEach(function (current,i) {
-    if (Array.isArray(current) && current.length === 1 && typeof current[0] === 'string') {
-      range[i].push(current[0]);
-    }
-  });
-  return range;
-}
-
-function flattenExplicit(r) {
-    r.forEach(function (e, i) {
-    r[i] = [e,e];
-  });
-  return r;
-}
-
-function parseRange(range, options) {
-  if (typeof range == 'string') range = [range];
-  range = collectStrings(range);
-  if (options.style === 'flat' && Array.isArray(range)) {
-    range = flattenExplicit(range[0]);
-  }
-  range = padOutSingleMemberArrays(range);
-  console.log(range);
-  let reservedWidth = collectDeclaredWidths(range);
-  return distributeUndeclaredWidths(range, reservedWidth);
-}
-
-function collectNormalizedRanges(gradient, steps) {
+function calculateStepSizes(gradient, steps) {
+  steps = Math.min(steps, HARDSTEPLIMIT);
   var sum = 0;
   var totalSteps = 0;
-  var tmp;
-  var threshold = 0.00001;
-  var equalRanges = true;
-  var range = gradient.colorRange;
-  range.forEach(function (a) {
-    sum += a[1];
-    totalSteps += a[0].length;
-    if (equalRanges && tmp !== undefined && Math.abs(a[1] - tmp) > threshold) {
-      equalRanges = false;
+  var totalIntSteps = 0;
+  var rescale = 1;
+  var totalL = 0;
+  var sharedDivider = undefined;
+  var smallestWidth = steps;
+  gradient.segments.forEach(function (segment, i) {
+      let s = segment.width * steps;
+      let l = segment.gradient.length;
+      let fs = s / l;
+      gradient.segments[i].steps = s;
+      if (l === 2 && segment.gradient[0] === segment.gradient[1]) {
+        gradient.segments[i].finesteps = s;
+        gradient.segments[i].finewidth = segment.width;
+        gradient.segments[i].isFlat = true;
+      } else {
+        gradient.segments[i].finesteps = fs;
+        gradient.segments[i].finewidth = segment.width / segment.gradient.length;
+      }
+      fs = gradient.segments[i].finesteps;
+      if (gradient.optimalBaseStepCount === undefined) {
+        let rat = rationalize(bigRat(fs), 1 / (gradient.segments[i].finewidth * HARDSTEPLIMIT));
+        let int = fs * rat.denom.value;
+        gradient.segments[i].minIntSteps = int;
+        totalIntSteps += int;
+        if (sharedDivider === undefined) {
+          sharedDivider = int;
+        }
+        else {
+          sharedDivider = ggt(sharedDivider, int);
+        }
+      }
+      if (gradient.segments[i].finesteps < 1) {
+        rescale = Math.max(rescale, 1 / gradient.segments[i].finesteps);
+      }
+      sum += s;
+      totalSteps += fs;
+      totalL += l;
+      smallestWidth = Math.min(segment.width/l,smallestWidth);
     }
-    tmp = a[1];
-  });
-  if (sum !== 1) {
-    console.warn('sum of range widths does not equal 1', sum, range)
+  );
+  gradient.steps = {
+    total: totalSteps,
+    totalInt: totalIntSteps,
+    defined: totalL,
+    smallestWidth: smallestWidth,
+    optimalBase: totalIntSteps / sharedDivider
+  };
+/*
+  if (gradient.optimalBaseStepCount === undefined && gradient.optimize) {
+    gradient = calculateStepSizes(gradient, gradient.optimalBaseStepCount);
   }
 
-  if (totalSteps > steps && equalRanges) {
-    console.warn(steps, 'too few steps requested, increasing to', totalSteps)
-    steps = totalSteps;
+  if (smallestWidth * steps < 1 && steps < HARDSTEPLIMIT) {
+    console.info(smallestWidth * steps, steps);
+    steps = Math.min(steps/smallestWidth, HARDSTEPLIMIT);
+    console.info(smallestWidth,'increasing step count to', steps);
+    gradient = calculateStepSizes(gradient, steps);
   }
-  var normalized = {
-    range: range,
-    steps: steps
-  };
-  gradient.steps = steps;
-  gradient.normalized = dropNarrowRanges(normalized);
+*/
+
+  return gradient;
+}
+
+  function collectNormalizedRanges(gradient, steps) {
+  gradient = calculateStepSizes(gradient, steps);
+  //gradient.normalized = dropNarrowRanges(normalized);
   return gradient;
 }
 
 function makeColorScale(range, steps, options) {
   var gradient = new LinearGradient(range, options);
+  if (!gradient.segments) {return false;}
   gradient = collectNormalizedRanges(gradient, steps);
-  console.log(gradient);
-  steps = gradient.normalized.steps;
-  range = gradient.normalized.range;
+  if (options.debugGradients) console.log('_____', gradient);
+
+
+  var segments = gradient.segments;
   var fullSteps;
+
+  //steps = Math.max(gradient.minSteps, steps);
+  steps = Math.ceil(steps);
   let stepsAvailable = steps;
   var usedSteps = 0;
+  gradient.colorSteps = [];
   var availableRange = 1;
-  var colors = [];
-  range.forEach(function (scale) {
-    fullSteps = Math.round(stepsAvailable * (scale[1]) / availableRange);
-    availableRange -= scale[1];
-    if (fullSteps > 1 && stepsAvailable >= 2) {
+
+  segments.forEach(function (segment) {
+    fullSteps = Math.round(stepsAvailable * segment.width / availableRange);
+    availableRange -= segment.width;
+    if (fullSteps >= 1 && stepsAvailable >= 1) {
       stepsAvailable -= fullSteps;
       usedSteps += fullSteps;
-      colors = colors.concat(fillColorScale(scale[0], fullSteps));
+      gradient.colorSteps = gradient.colorSteps.concat(
+        fillColorScale(segment.gradient, fullSteps)
+      );
     } else {
-      console.info('dropped range', scale);
+      if (options.debugGradients) console.info('dropped range', segment);
     }
   });
+
   if (usedSteps !== steps) {
     console.error(
-      'calculated color steps dont match up', usedSteps, steps, range, colors
-    );
+      'calculated color steps dont match up', usedSteps, steps, segments);
   }
-  return colors;
+  return gradient.colorSteps;
 }
 
 export {

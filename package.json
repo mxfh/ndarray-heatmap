@@ -62,6 +62,7 @@
     "mainVarName": "heatmap"
   },
   "dependencies": {
+    "big-rational": "^0.10.5",
     "colorbrewer": "^1.0.0",
     "cwise": "^1.0.8",
     "d3-array": "^0.7.0",
