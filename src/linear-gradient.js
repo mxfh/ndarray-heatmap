@@ -8,6 +8,7 @@ const HARDSTEPLIMIT = 65535;
 
 var LinearGradient = function (obj, options) {
   this.segments = setWidths(parseGradientObject(_.cloneDeep(obj)));
+  options = options || {};
   this.name = options.name || obj.name;
   this.selected = options.selected || obj.selected;
   this.optimize = options.optimize || obj.optimize;
