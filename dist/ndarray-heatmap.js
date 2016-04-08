@@ -2231,6 +2231,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 	
 	function makeColorScale(range, steps, options) {
+	  options = options || {};
 	  var gradient = new LinearGradient(range, options);
 	  if (!gradient.segments) {
 	    return false;
