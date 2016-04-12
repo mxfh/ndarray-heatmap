@@ -3,18 +3,37 @@ import pack from 'ndarray-pack';
 import {extent} from 'd3-array';
 import colorbrewer from 'colorbrewer';
 import {makeColorScale} from './linear-gradient';
+import {interpolateLab} from 'd3-interpolate';
+import {scaleLinear} from 'd3-scale';
+import {rgb} from 'd3-color';
 
-function renderToCanvas(ndArr, imgArray, colorTable, min, max, imgWidth) {
+function renderToCanvas(ndArr, imgArray, colorTable, min, max) {
   // premultiply constant values
-  let range = max - min + 1; // add one for padding to equal spaced
+  let range = max - min; // add one for padding to equal spaced
+  let w = ndArr.shape[1];
+  let h = ndArr.shape[0];
   let l = colorTable.length;
-  for (let y = 0; y < ndArr.shape[0]; ++y) {
-    let yIndex = imgWidth * y;
-    for (let x = 0; x < ndArr.shape[1]; ++x) {
-      let norm = ndArr.data[yIndex + x] - min;
-      let colorIndex = ~~((norm / range) * l);
-      imgArray[yIndex + x] = colorTable[colorIndex];
+  let lineStartIndex = 0;
+  let index = 0;
+  let lastIndex = w * h;
+
+  function forIndex(index) {
+    let norm = ndArr.data[index] - min;
+    let colorIndex = Math.floor((norm / range) * l);
+    imgArray[index] = colorTable[colorIndex];
+  }
+
+  function forLine(index, lineEndIndex) {
+    while (index < lineEndIndex) {
+      forIndex(index);
+      index++;
     }
+  }
+
+  while (lineStartIndex < lastIndex) {
+    index = lineStartIndex;
+    forLine(index, lineStartIndex + w);
+    lineStartIndex += w;
   }
 }
 
@@ -26,6 +45,7 @@ function heatmap() {
   let domain = null;
   let colorRange = fallBackColorScale;
   let options = undefined;
+
 
   function buildColorTable(colors) {
     var typedArr = new Uint32Array(colors.length);
@@ -41,11 +61,46 @@ function heatmap() {
     return typedArr;
   }
 
+  function fillColorScale(range, steps) {
+    if (range.length >= 2) {
+      let colors = [];
+      let stops = [];
+      let l = range.length;
+      let s = steps - 1;
+      for (let i = 0; i < l; i++) {
+        stops.push((s) * i / (l - 1));
+      }
+      let colorScale = scaleLinear()
+        .domain(stops)
+        .range(range)
+        .interpolate(interpolateLab);
+      for (let i = 0; i < steps; ++i) {
+        colors.push(rgb(colorScale(i)));
+      }
+      return colors;
+    } else {
+      return false;
+    }
+  }
+
+  function timeFn(runTimer, fn, logFn, data) {
+
+    if (runTimer) {
+      let p = performance.now();
+      fn();
+      let time = performance.now() - p;
+      logFn(time, data);
+    }
+    else fn();
+  }
+
+
   function render(_) {
     let canvas = _ || document.createElement('canvas');
     canvas.width = data.shape[1];
     canvas.height = data.shape[0];
     let ctx = canvas.getContext('2d');
+    let debug = options.debug || false;
 
     let imgData = ctx.createImageData(canvas.width, canvas.height);
 
@@ -56,15 +111,32 @@ function heatmap() {
     let buf32 = new Uint32Array(buf);
 
     let [min, max] = domain || extent(data.data);
+    var colors;
 
-    let colors = makeColorScale(colorRange, colorSteps, options);
-    if (!colors) {return false};
+    if (typeof makeColorScale === 'function') {
+      colors = makeColorScale(colorRange, colorSteps, options.gradient);
+      if (options.gradient.debug > 1) console.log(colors);
+    } else {
+      colors = fillColorScale(colorRange, colorSteps);
+    }
+
+    if (!colors) {
+      return false;
+    }
     let colorTable = buildColorTable(colors);
+    timeFn(
+      debug > 0,
+      function () {
+        renderToCanvas(data, buf32, colorTable, min, max)
+      },
+      function (time, data) {
+        console.log('LUT Perf:', time.toPrecision(5), 'ms/MPixel', (time * 1000000 / (data.shape[0] * data.shape[1])).toPrecision(5));
+      },
+      data
+    );
 
-    renderToCanvas(data, buf32, colorTable, min, max, canvas.width);
     imgData.data.set(buf8);
     ctx.putImageData(imgData, 0, 0);
-
     return canvas;
   }
 
@@ -99,5 +171,5 @@ function heatmap() {
 }
 
 export {
-  heatmap, colorbrewer
+  heatmap
 };

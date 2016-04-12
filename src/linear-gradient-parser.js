@@ -1,5 +1,3 @@
-import _ from 'lodash';
-
 function unpackNestedColorArray(arr) {
   if (arr.length === 1 && Array.isArray(arr[0])) {
     return arr[0]
@@ -87,16 +85,20 @@ function parseSegments(unparsedSegments) {
   return parsedSegments;
 }
 
-function parseGradientObject(unparsedObj) {
-  var input = _.cloneDeep(unparsedObj);
+function parseGradientObject(obj) {
+  var unparsedObj = obj;
+  if (typeof unparsedObj === 'string') {
+    unparsedObj = [unparsedObj];
+  }
+
   if (Array.isArray(unparsedObj)) {
     unparsedObj.segments = parseArrayToSegments(unparsedObj);
   }
   // gradient on root to single member segments
   if (unparsedObj.hasOwnProperty('gradient')) {
-    unparsedObj = [{
+    unparsedObj.segments = [{
       gradient: unparsedObj.gradient,
-      width: unparsedObj.width || NaN
+      width: unparsedObj.gradient.width || NaN
     }];
   }
   if (unparsedObj.hasOwnProperty('segments')) {
@@ -105,8 +107,6 @@ function parseGradientObject(unparsedObj) {
     console.error('unable to normalize', input)
     return false;
   }
-  //console.log('i', input);
-  //console.log('o', _.cloneDeep(parsedSegments),'A', Array.isArray(parsedSegments));
 }
 
 export {

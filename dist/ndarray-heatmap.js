@@ -59,7 +59,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	Object.defineProperty(exports, "__esModule", {
 	  value: true
 	});
-	exports.colorbrewer = exports.heatmap = undefined;
+	exports.heatmap = undefined;
 	
 	var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
 	
@@ -79,19 +79,41 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	var _linearGradient = __webpack_require__(13);
 	
+	var _d3Interpolate = __webpack_require__(14);
+	
+	var _d3Scale = __webpack_require__(16);
+	
+	var _d3Color = __webpack_require__(15);
+	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
-	function renderToCanvas(ndArr, imgArray, colorTable, min, max, imgWidth) {
+	function renderToCanvas(ndArr, imgArray, colorTable, min, max) {
 	  // premultiply constant values
-	  var range = max - min + 1; // add one for padding to equal spaced
+	  var range = max - min; // add one for padding to equal spaced
+	  var w = ndArr.shape[1];
+	  var h = ndArr.shape[0];
 	  var l = colorTable.length;
-	  for (var y = 0; y < ndArr.shape[0]; ++y) {
-	    var yIndex = imgWidth * y;
-	    for (var x = 0; x < ndArr.shape[1]; ++x) {
-	      var norm = ndArr.data[yIndex + x] - min;
-	      var colorIndex = ~ ~(norm / range * l);
-	      imgArray[yIndex + x] = colorTable[colorIndex];
+	  var lineStartIndex = 0;
+	  var index = 0;
+	  var lastIndex = w * h;
+	
+	  function forIndex(index) {
+	    var norm = ndArr.data[index] - min;
+	    var colorIndex = Math.floor(norm / range * l);
+	    imgArray[index] = colorTable[colorIndex];
+	  }
+	
+	  function forLine(index, lineEndIndex) {
+	    while (index < lineEndIndex) {
+	      forIndex(index);
+	      index++;
 	    }
+	  }
+	
+	  while (lineStartIndex < lastIndex) {
+	    index = lineStartIndex;
+	    forLine(index, lineStartIndex + w);
+	    lineStartIndex += w;
 	  }
 	}
 	
@@ -119,11 +141,41 @@ return /******/ (function(modules) { // webpackBootstrap
 	    return typedArr;
 	  }
 	
+	  function fillColorScale(range, steps) {
+	    if (range.length >= 2) {
+	      var colors = [];
+	      var stops = [];
+	      var l = range.length;
+	      var s = steps - 1;
+	      for (var i = 0; i < l; i++) {
+	        stops.push(s * i / (l - 1));
+	      }
+	      var colorScale = (0, _d3Scale.scaleLinear)().domain(stops).range(range).interpolate(_d3Interpolate.interpolateLab);
+	      for (var _i = 0; _i < steps; ++_i) {
+	        colors.push((0, _d3Color.rgb)(colorScale(_i)));
+	      }
+	      return colors;
+	    } else {
+	      return false;
+	    }
+	  }
+	
+	  function timeFn(runTimer, fn, logFn, data) {
+	
+	    if (runTimer) {
+	      var p = performance.now();
+	      fn();
+	      var time = performance.now() - p;
+	      logFn(time, data);
+	    } else fn();
+	  }
+	
 	  function render(_) {
 	    var canvas = _ || document.createElement('canvas');
 	    canvas.width = data.shape[1];
 	    canvas.height = data.shape[0];
 	    var ctx = canvas.getContext('2d');
+	    var debug = options.debug || false;
 	
 	    var imgData = ctx.createImageData(canvas.width, canvas.height);
 	
@@ -140,17 +192,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var min = _ref2[0];
 	    var max = _ref2[1];
 	
+	    var colors;
 	
-	    var colors = (0, _linearGradient.makeColorScale)(colorRange, colorSteps, options);
+	    if (typeof _linearGradient.makeColorScale === 'function') {
+	      colors = (0, _linearGradient.makeColorScale)(colorRange, colorSteps, options.gradient);
+	      if (options.gradient.debug > 1) console.log(colors);
+	    } else {
+	      colors = fillColorScale(colorRange, colorSteps);
+	    }
+	
 	    if (!colors) {
 	      return false;
-	    };
+	    }
 	    var colorTable = buildColorTable(colors);
+	    timeFn(debug > 0, function () {
+	      renderToCanvas(data, buf32, colorTable, min, max);
+	    }, function (time, data) {
+	      console.log('LUT Perf:', time.toPrecision(5), 'ms/MPixel', (time * 1000000 / (data.shape[0] * data.shape[1])).toPrecision(5));
+	    }, data);
 	
-	    renderToCanvas(data, buf32, colorTable, min, max, canvas.width);
 	    imgData.data.set(buf8);
 	    ctx.putImageData(imgData, 0, 0);
-	
 	    return canvas;
 	  }
 	
@@ -185,7 +247,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 	
 	exports.heatmap = heatmap;
-	exports.colorbrewer = _colorbrewer2.default;
 
 /***/ },
 /* 1 */
@@ -2064,21 +2125,29 @@ return /******/ (function(modules) { // webpackBootstrap
 	
 	var _linearGradientParser = __webpack_require__(24);
 	
+	var _lodash = __webpack_require__(25);
+	
+	var _lodash2 = _interopRequireDefault(_lodash);
+	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
 	var HARDSTEPLIMIT = 65535;
 	
 	var LinearGradient = function LinearGradient(obj, options) {
-	  this.segments = setWidths((0, _linearGradientParser.parseGradientObject)(_.cloneDeep(obj)));
+	  this.segments = setWidths((0, _linearGradientParser.parseGradientObject)(obj));
 	  options = options || {};
 	  this.name = options.name || obj.name;
 	  this.selected = options.selected || obj.selected;
 	  this.optimize = options.optimize || obj.optimize;
+	  this.steps = options.steps || obj.steps || {};
+	  this.widths = {};
+	  this.debug = options.debug || obj.debug;
 	};
 	
 	LinearGradient.prototype.name = 'Unnamed Linear Gradient';
 	LinearGradient.prototype.selected = false;
 	LinearGradient.prototype.optimize = false;
+	LinearGradient.prototype.debug = false;
 	
 	function setWidths(segments) {
 	  if (segments) {
@@ -2141,8 +2210,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 	
 	function kgv(m, n) {
-	  o = ggt(m, n);
-	  p = m * n / o;
+	  var o = ggt(m, n);
+	  var p = m * n / o;
 	  return p;
 	}
 	
@@ -2160,111 +2229,99 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 	
 	function calculateStepSizes(gradient, steps) {
-	  steps = Math.min(steps, HARDSTEPLIMIT);
 	  var sum = 0;
 	  var totalSteps = 0;
 	  var totalIntSteps = 0;
-	  var rescale = 1;
 	  var totalL = 0;
-	  var sharedDivider = undefined;
+	  var minSteps = 1;
 	  var smallestWidth = steps;
 	  gradient.segments.forEach(function (segment, i) {
 	    var s = segment.width * steps;
 	    var l = segment.gradient.length;
 	    var fs = s / l;
-	    gradient.segments[i].steps = s;
+	    segment.steps = s;
 	    if (l === 2 && segment.gradient[0] === segment.gradient[1]) {
-	      gradient.segments[i].finesteps = s;
-	      gradient.segments[i].finewidth = segment.width;
-	      gradient.segments[i].isFlat = true;
+	      segment.finesteps = s;
+	      segment.finewidth = segment.width;
+	      segment.isFlat = true;
 	    } else {
-	      gradient.segments[i].finesteps = fs;
-	      gradient.segments[i].finewidth = segment.width / segment.gradient.length;
+	      segment.finesteps = fs;
+	      segment.finewidth = segment.width / segment.gradient.length;
 	    }
-	    fs = gradient.segments[i].finesteps;
-	    if (gradient.optimalBaseStepCount === undefined) {
-	      var rat = rationalize((0, _bigRational2.default)(fs), 1 / (gradient.segments[i].finewidth * HARDSTEPLIMIT));
+	    if (gradient.optimize) {
+	      fs = segment.finesteps;
+	      var fw = segment.finewidth;
+	      var rat = rationalize((0, _bigRational2.default)(fw), 1 / (fw * HARDSTEPLIMIT));
 	      var int = fs * rat.denom.value;
-	      gradient.segments[i].minIntSteps = int;
 	      totalIntSteps += int;
-	      if (sharedDivider === undefined) {
-	        sharedDivider = int;
-	      } else {
-	        sharedDivider = ggt(sharedDivider, int);
-	      }
+	      minSteps = kgv(minSteps, rat.denom.value);
+	      sum += s;
+	      totalSteps += fs;
+	      totalL += l;
+	      smallestWidth = Math.min(segment.width / l, smallestWidth);
 	    }
-	    if (gradient.segments[i].finesteps < 1) {
-	      rescale = Math.max(rescale, 1 / gradient.segments[i].finesteps);
-	    }
-	    sum += s;
-	    totalSteps += fs;
-	    totalL += l;
-	    smallestWidth = Math.min(segment.width / l, smallestWidth);
+	    gradient.segments[i] = segment;
 	  });
-	  gradient.steps = {
-	    total: totalSteps,
-	    totalInt: totalIntSteps,
-	    defined: totalL,
-	    smallestWidth: smallestWidth,
-	    optimalBase: totalIntSteps / sharedDivider
-	  };
-	  /*
-	    if (gradient.optimalBaseStepCount === undefined && gradient.optimize) {
-	      gradient = calculateStepSizes(gradient, gradient.optimalBaseStepCount);
-	    }
-	  
-	    if (smallestWidth * steps < 1 && steps < HARDSTEPLIMIT) {
-	      console.info(smallestWidth * steps, steps);
-	      steps = Math.min(steps/smallestWidth, HARDSTEPLIMIT);
-	      console.info(smallestWidth,'increasing step count to', steps);
-	      gradient = calculateStepSizes(gradient, steps);
-	    }
-	  */
-	
+	  gradient.steps.min = minSteps;
+	  gradient.steps.initial = gradient.steps.initial || steps;
+	  gradient.steps.total = totalSteps;
+	  gradient.steps.unique = totalL;
+	  gradient.widths.smallest = smallestWidth;
+	  gradient.widths.sum = sum;
 	  return gradient;
 	}
 	
-	function collectNormalizedRanges(gradient, steps) {
-	  gradient = calculateStepSizes(gradient, steps);
-	  //gradient.normalized = dropNarrowRanges(normalized);
-	  return gradient;
-	}
-	
-	function makeColorScale(range, steps, options) {
-	  options = options || {};
-	  var gradient = new LinearGradient(range, options);
-	  if (!gradient.segments) {
-	    return false;
-	  }
-	  gradient = collectNormalizedRanges(gradient, steps);
-	  if (options.debugGradients) console.log('_____', gradient);
-	
-	  var segments = gradient.segments;
+	function segmentedColorScale(segments, steps) {
 	  var fullSteps;
-	
 	  //steps = Math.max(gradient.minSteps, steps);
 	  steps = Math.ceil(steps);
 	  var stepsAvailable = steps;
 	  var usedSteps = 0;
-	  gradient.colorSteps = [];
+	  var colorSteps = [];
 	  var availableRange = 1;
-	
 	  segments.forEach(function (segment) {
 	    fullSteps = Math.round(stepsAvailable * segment.width / availableRange);
 	    availableRange -= segment.width;
 	    if (fullSteps >= 1 && stepsAvailable >= 1) {
 	      stepsAvailable -= fullSteps;
 	      usedSteps += fullSteps;
-	      gradient.colorSteps = gradient.colorSteps.concat(fillColorScale(segment.gradient, fullSteps));
-	    } else {
-	      if (options.debugGradients) console.info('dropped range', segment);
+	      colorSteps = colorSteps.concat(fillColorScale(segment.gradient, fullSteps));
 	    }
 	  });
 	
 	  if (usedSteps !== steps) {
 	    console.error('calculated color steps dont match up', usedSteps, steps, segments);
 	  }
-	  return gradient.colorSteps;
+	  return colorSteps;
+	}
+	
+	function collectNormalizedRanges(gradient, steps) {
+	  gradient = calculateStepSizes(gradient, steps);
+	  return gradient;
+	}
+	
+	function optimize(gradient, steps) {
+	  var newSteps;
+	  if (gradient.steps.min !== undefined && gradient.optimize) {
+	    var min = Math.floor(steps / gradient.steps.min);
+	    newSteps = (min >= 1 ? min : 1) * gradient.steps.min;
+	    gradient.steps.optimum = newSteps;
+	    if (gradient.debug > 1) console.info(gradient.name, gradient.steps, 'optimized');
+	  }
+	  return gradient;
+	}
+	
+	function makeColorScale(range, steps, options) {
+	  options = options || {};
+	  var gradient = new LinearGradient(_lodash2.default.cloneDeep(range), options);
+	  if (!gradient.segments) {
+	    return false;
+	  }
+	  gradient = collectNormalizedRanges(gradient, steps);
+	  if (gradient.optimize) gradient = optimize(gradient, steps);
+	  if (gradient.debug > 1) console.log('_____', gradient);
+	  steps = Math.min(gradient.steps.optimum || steps, HARDSTEPLIMIT);
+	  return segmentedColorScale(gradient.segments, gradient.steps.optimum || steps);
 	}
 	
 	exports.makeColorScale = makeColorScale;
@@ -7615,21 +7672,13 @@ return /******/ (function(modules) { // webpackBootstrap
 
 /***/ },
 /* 24 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ function(module, exports) {
 
 	'use strict';
 	
 	Object.defineProperty(exports, "__esModule", {
 	  value: true
 	});
-	exports.parseGradientObject = undefined;
-	
-	var _lodash = __webpack_require__(25);
-	
-	var _lodash2 = _interopRequireDefault(_lodash);
-	
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-	
 	function unpackNestedColorArray(arr) {
 	  if (arr.length === 1 && Array.isArray(arr[0])) {
 	    return arr[0];
@@ -7706,16 +7755,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	  return parsedSegments;
 	}
 	
-	function parseGradientObject(unparsedObj) {
-	  var input = _lodash2.default.cloneDeep(unparsedObj);
+	function parseGradientObject(obj) {
+	  var unparsedObj = obj;
+	  if (typeof unparsedObj === 'string') {
+	    unparsedObj = [unparsedObj];
+	  }
+	
 	  if (Array.isArray(unparsedObj)) {
 	    unparsedObj.segments = parseArrayToSegments(unparsedObj);
 	  }
 	  // gradient on root to single member segments
 	  if (unparsedObj.hasOwnProperty('gradient')) {
-	    unparsedObj = [{
+	    unparsedObj.segments = [{
 	      gradient: unparsedObj.gradient,
-	      width: unparsedObj.width || NaN
+	      width: unparsedObj.gradient.width || NaN
 	    }];
 	  }
 	  if (unparsedObj.hasOwnProperty('segments')) {
@@ -7724,8 +7777,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	    console.error('unable to normalize', input);
 	    return false;
 	  }
-	  //console.log('i', input);
-	  //console.log('o', _.cloneDeep(parsedSegments),'A', Array.isArray(parsedSegments));
 	}
 	
 	exports.parseGradientObject = parseGradientObject;

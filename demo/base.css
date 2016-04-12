@@ -7,3 +7,6 @@ body {
     background-position: 0 0, 16px 16px;
     line-height: 0;
 }
+
+canvas {float: left}
+canvas:hover {height: inherit !important; width: inherit !important}

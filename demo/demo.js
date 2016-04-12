@@ -1,74 +1,136 @@
 window.addEventListener('load', function () {
-  var shape = [512, 512];
-  var data = new Array(shape[0]);
-  for (var i = 0; i < shape[0]; ++i) {
-    data[i] = new Array(shape[1]);
-    for (var j = 0; j < shape[1]; ++j) {
-      data[i][j] = j * Math.sin(i * Math.PI / 2 / shape[0]);
+    var debugHeatMap, debugGradients;
+  //var debugGradients = 0; // 1,2
+  //var debugHeatMap = 1; // 1,2
+    var base = 512;
+    var half = Math.floor(base / 2);
+    var shape = [base, half];
+    var data = new Array(shape[0]);
+    var domain = [0, half];
+
+    function centerDistance(a, b) {
+      return Math.sqrt(Math.pow(a, 2) + Math.pow(b, 2));
     }
-  }
-  var steps = [1,2,3,5,9,15,25,64,128];
-  //steps = 12;
-  var smallSizeFactor = 0.25;
 
-
-  // be careful with multi-hue scales
-  // use only predefined stops from color brewer
-  // https://vis4.net/blog/posts/mastering-multi-hued-color-scales/
-
-  var selectedScale = [' '];
-  var allSmall = true;
-  var debugGradients = false;
-  //testScales = testScaleShort;
-
-
-  function renderScale(colorScale, options, canvasSize) {
-    if (Array.isArray(steps)) {
-      steps.forEach(function (step) {
-        renderStep(colorScale, options, canvasSize, step)
-      })
-    } else {
-      renderStep(colorScale, options, canvasSize, steps)
+    function invert(v, offset) {
+      return -(v + offset);
     }
-  }
 
-  function renderStep(colorScale, options, canvasSize, step) {
-    options.debugGradients = options.debugGradients || debugGradients;
-    var renderer = heatmap.heatmap()
-      .data(data)
-      .colorSteps(step)
-      .options(options)
-      .colorRange(colorScale);
-    var canvas = renderer();
-    if (!canvas) return false;
-    if (canvasSize) {
-      canvas.style.width = canvasSize.width;
-      canvas.style.height = canvasSize.height;
-    }
-    document.body.appendChild(canvas);
-  }
-
-  var selectedScales = testScales.filter(function (obj) {
-    if (selectedScale === undefined || !selectedScale || selectedScale === "") return true;
-    if (typeof selectedScale === 'string') return obj.name == selectedScale;
-    if (Array.isArray(selectedScale)) return selectedScale.indexOf(obj.name) > -1;
-  });
-
-  selectedScales.forEach(function (scale) {
-    renderScale(scale, {selected: true});
-  });
-  if (allSmall) {
-    testScales.forEach(function (scale,i) {
-      console.log("===== testscale ====", scale.name || i);
-      renderScale(scale, {
-          name: scale.name
-        }, {
-          height: smallSizeFactor * shape[0] + 'px',
-          width: smallSizeFactor * shape[1] + 'px'
+    for (var i = 0; i < shape[0]; ++i) {
+      data[i] = new Array(shape[1]);
+      var y = i - half;
+      for (var j = 0; j < shape[1]; ++j) {
+        let x = j - half;
+        if (y <= 0) {
+          data[i][j] = centerDistance(x, y);
+        } else {
+          x = j;
+          data[i][j] = invert(centerDistance(x, y), -half);
+          //if (y == 170 && x > half -16) console.log(x, y, i, j, data[i][j]);
         }
-      );
-    });
-  }
+      }
+    }
 
-})
-;
+    if (typeof convert === 'function') data = convert(data);
+
+    var steps = [1, 2, 5, 9, 15, 64, 256, 1024];
+    var selectedSteps = [16];
+    var smallSizeFactor = 0.25;
+    var selectedScales = ['bw'];
+    var selectedScalesObj = {};
+    var options = {gradient: {}};
+    var allSmall = true;
+    //var allSmall = false;
+    var optimizeAll = false;
+
+
+
+    // be careful with multi-hue scales
+    // use only predefined stops from color brewer
+    // https://vis4.net/blog/posts/mastering-multi-hued-color-scales/
+
+    function renderScale(colorScale, steps, options) {
+      return new Promise(function (resolve, reject) {
+        var canvas = document.createElement('canvas');
+        var name = options.gradient.name;
+        canvas.setAttribute('class', 'gradient-' + name + "-" + steps);
+        canvas.width = shape[1];
+        canvas.height = shape[0];
+        if (options.canvasStyleSize) {
+          canvas.style.width = options.canvasStyleSize.width;
+          canvas.style.height = options.canvasStyleSize.height;
+        }
+        document.body.appendChild(canvas);
+        setTimeout(function () {
+          var ctx;
+          //console.log(name);
+          options.gradient.name = name;
+          let renderer = heatmap.heatmap()
+            .data(data)
+            .domain(domain)
+            .colorSteps(steps)
+            .options(options)
+            .colorRange(colorScale);
+          let result = renderer(canvas);
+          if (!result) {
+            ctx = canvas.getContext('2d');
+            let text = "Error!";
+            ctx.textAlign = "center";
+            let height = canvas.width / text.length * (5 / 3);
+            ctx.font = height + "px monospace";
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+          } else {
+            ctx = result.getContext('2d');
+          }
+          ctx.globalCompositeOperation = 'xor';
+          ctx.font = 45 + "px monospace";
+          ctx.textAlign = "left";
+          ctx.fillText(steps + " Steps", 15, 45);
+          ctx.fillText(name, 15, 90);
+          resolve(result);
+        }, 200);
+      });
+    }
+
+    function forEachStep(scale, steps, options) {
+      steps.forEach(function (step) {
+        renderScale(scale, step, options);
+      })
+    }
+
+    function forEachScale(scales, steps, options) {
+      for (var key in scales) {
+        options.gradient.name = scales[key].name || key;
+        forEachStep(scales[key], steps, options, key);
+      }
+    }
+
+    options.gradient.debug = debugGradients;
+    options.debug = debugHeatMap || false;
+
+
+    if (selectedScales === undefined || !selectedScales || selectedScales === "")
+      selectedScalesObj = {};
+    if (typeof selectedScales === 'string')
+      selectedScalesObj[selectedScales] = testScales[selectedScales];
+    if (Array.isArray(selectedScales))
+      selectedScales.forEach(function (n) {
+        if (testScales[n]) {
+          selectedScalesObj[n] = testScales[n];
+        }
+      });
+
+    options.gradient.selected = true;
+    forEachScale(selectedScalesObj, selectedSteps, options);
+
+    if (allSmall) {
+      options.gradient.selected = false;
+      if (optimizeAll) options.gradient.optimize = true;
+      options.canvasStyleSize = {
+        height: smallSizeFactor * shape[0] + 'px',
+        width: smallSizeFactor * shape[1] + 'px'
+      };
+      forEachScale(testScales, steps, options);
+    }
+  }
+);

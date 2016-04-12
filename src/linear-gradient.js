@@ -3,27 +3,34 @@ import {scaleLinear} from 'd3-scale';
 import {rgb} from 'd3-color';
 import bigRat from 'big-rational';
 import {parseGradientObject} from './linear-gradient-parser';
+import _ from 'lodash';
 
 const HARDSTEPLIMIT = 65535;
 
 var LinearGradient = function (obj, options) {
-  this.segments = setWidths(parseGradientObject(_.cloneDeep(obj)));
+  this.segments = setWidths(parseGradientObject(obj));
   options = options || {};
   this.name = options.name || obj.name;
   this.selected = options.selected || obj.selected;
   this.optimize = options.optimize || obj.optimize;
+  this.steps = (options.steps || obj.steps) || {};
+  this.widths = {};
+  this.debug = options.debug || obj.debug;
 };
 
 LinearGradient.prototype.name = 'Unnamed Linear Gradient';
 LinearGradient.prototype.selected = false;
 LinearGradient.prototype.optimize = false;
+LinearGradient.prototype.debug = false;
 
 function setWidths(segments) {
   if (segments) {
     return distributeUndeclaredWidths(
       collectDeclaredWidths(segments)
-    )}
-    else {return false;
+    )
+  }
+  else {
+    return false;
   }
 }
 
@@ -86,8 +93,8 @@ function ggt(m, n) {
 }
 
 function kgv(m, n) {
-  o = ggt(m, n);
-  p = (m * n) / o;
+  let o = ggt(m, n);
+  let p = (m * n) / o;
   return p;
 }
 
@@ -105,107 +112,69 @@ function rationalize(rational, epsilon) {
 }
 
 function calculateStepSizes(gradient, steps) {
-  steps = Math.min(steps, HARDSTEPLIMIT);
   var sum = 0;
   var totalSteps = 0;
   var totalIntSteps = 0;
-  var rescale = 1;
   var totalL = 0;
-  var sharedDivider = undefined;
+  var minSteps = 1;
   var smallestWidth = steps;
   gradient.segments.forEach(function (segment, i) {
       let s = segment.width * steps;
       let l = segment.gradient.length;
       let fs = s / l;
-      gradient.segments[i].steps = s;
+      segment.steps = s;
       if (l === 2 && segment.gradient[0] === segment.gradient[1]) {
-        gradient.segments[i].finesteps = s;
-        gradient.segments[i].finewidth = segment.width;
-        gradient.segments[i].isFlat = true;
+        segment.finesteps = s;
+        segment.finewidth = segment.width;
+        segment.isFlat = true;
       } else {
-        gradient.segments[i].finesteps = fs;
-        gradient.segments[i].finewidth = segment.width / segment.gradient.length;
+        segment.finesteps = fs;
+        segment.finewidth = segment.width / segment.gradient.length;
       }
-      fs = gradient.segments[i].finesteps;
-      if (gradient.optimalBaseStepCount === undefined) {
-        let rat = rationalize(bigRat(fs), 1 / (gradient.segments[i].finewidth * HARDSTEPLIMIT));
+      if (gradient.optimize) {
+        fs = segment.finesteps;
+        let fw = segment.finewidth;
+        let rat = rationalize(bigRat(fw), 1 / (fw * HARDSTEPLIMIT));
         let int = fs * rat.denom.value;
-        gradient.segments[i].minIntSteps = int;
         totalIntSteps += int;
-        if (sharedDivider === undefined) {
-          sharedDivider = int;
-        }
-        else {
-          sharedDivider = ggt(sharedDivider, int);
-        }
+        minSteps = kgv(minSteps, rat.denom.value);
+        sum += s;
+        totalSteps += fs;
+        totalL += l;
+        smallestWidth = Math.min(segment.width / l, smallestWidth);
+
       }
-      if (gradient.segments[i].finesteps < 1) {
-        rescale = Math.max(rescale, 1 / gradient.segments[i].finesteps);
-      }
-      sum += s;
-      totalSteps += fs;
-      totalL += l;
-      smallestWidth = Math.min(segment.width/l,smallestWidth);
+      gradient.segments[i] = segment;
     }
   );
-  gradient.steps = {
-    total: totalSteps,
-    totalInt: totalIntSteps,
-    defined: totalL,
-    smallestWidth: smallestWidth,
-    optimalBase: totalIntSteps / sharedDivider
-  };
-/*
-  if (gradient.optimalBaseStepCount === undefined && gradient.optimize) {
-    gradient = calculateStepSizes(gradient, gradient.optimalBaseStepCount);
-  }
-
-  if (smallestWidth * steps < 1 && steps < HARDSTEPLIMIT) {
-    console.info(smallestWidth * steps, steps);
-    steps = Math.min(steps/smallestWidth, HARDSTEPLIMIT);
-    console.info(smallestWidth,'increasing step count to', steps);
-    gradient = calculateStepSizes(gradient, steps);
-  }
-*/
-
+  gradient.steps.min = minSteps;
+  gradient.steps.initial = gradient.steps.initial || steps;
+  gradient.steps.total = totalSteps;
+  gradient.steps.unique = totalL;
+  gradient.widths.smallest = smallestWidth;
+  gradient.widths.sum = sum;
   return gradient;
 }
 
-  function collectNormalizedRanges(gradient, steps) {
-  gradient = calculateStepSizes(gradient, steps);
-  //gradient.normalized = dropNarrowRanges(normalized);
-  return gradient;
-}
-
-function makeColorScale(range, steps, options) {
-  options = options || {};
-  var gradient = new LinearGradient(range, options);
-  if (!gradient.segments) {return false;}
-  gradient = collectNormalizedRanges(gradient, steps);
-  if (options.debugGradients) console.log('_____', gradient);
-
-
-  var segments = gradient.segments;
+function segmentedColorScale(segments, steps) {
   var fullSteps;
-
   //steps = Math.max(gradient.minSteps, steps);
   steps = Math.ceil(steps);
   let stepsAvailable = steps;
   var usedSteps = 0;
-  gradient.colorSteps = [];
+  let colorSteps = [];
   var availableRange = 1;
-
   segments.forEach(function (segment) {
-    fullSteps = Math.round(stepsAvailable * segment.width / availableRange);
+    fullSteps = Math.round(
+      stepsAvailable * segment.width / availableRange
+    );
     availableRange -= segment.width;
     if (fullSteps >= 1 && stepsAvailable >= 1) {
       stepsAvailable -= fullSteps;
       usedSteps += fullSteps;
-      gradient.colorSteps = gradient.colorSteps.concat(
+      colorSteps = colorSteps.concat(
         fillColorScale(segment.gradient, fullSteps)
       );
-    } else {
-      if (options.debugGradients) console.info('dropped range', segment);
     }
   });
 
@@ -213,7 +182,37 @@ function makeColorScale(range, steps, options) {
     console.error(
       'calculated color steps dont match up', usedSteps, steps, segments);
   }
-  return gradient.colorSteps;
+  return colorSteps;
+}
+
+function collectNormalizedRanges(gradient, steps) {
+  gradient = calculateStepSizes(gradient, steps);
+  return gradient;
+}
+
+function optimize(gradient, steps) {
+  var newSteps;
+  if (gradient.steps.min !== undefined && gradient.optimize) {
+    let min = Math.floor(steps / gradient.steps.min);
+    newSteps = ((min >= 1) ? min : 1) * gradient.steps.min;
+    gradient.steps.optimum = newSteps;
+    if (gradient.debug > 1)
+    console.info(gradient.name, gradient.steps, 'optimized');
+  }
+  return gradient;
+}
+
+function makeColorScale(range, steps, options) {
+  options = options || {};
+  var gradient = new LinearGradient(_.cloneDeep(range), options);
+  if (!gradient.segments) {
+    return false;
+  }
+  gradient = collectNormalizedRanges(gradient, steps);
+  if (gradient.optimize) gradient = optimize(gradient, steps);
+  if (gradient.debug > 1) console.log('_____', gradient);
+  steps = Math.min(gradient.steps.optimum || steps, HARDSTEPLIMIT);
+  return segmentedColorScale(gradient.segments, gradient.steps.optimum || steps);
 }
 
 export {
