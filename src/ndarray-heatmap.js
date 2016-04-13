@@ -44,7 +44,7 @@ function heatmap() {
   let colorSteps = 256;
   let domain = null;
   let colorRange = fallBackColorScale;
-  let options = undefined;
+  var options = undefined;
 
 
   function buildColorTable(colors) {
@@ -100,6 +100,7 @@ function heatmap() {
     canvas.width = data.shape[1];
     canvas.height = data.shape[0];
     let ctx = canvas.getContext('2d');
+    options = options || {};
     let debug = options.debug || false;
 
     let imgData = ctx.createImageData(canvas.width, canvas.height);

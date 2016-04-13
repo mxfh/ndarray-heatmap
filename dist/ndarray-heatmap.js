@@ -175,6 +175,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    canvas.width = data.shape[1];
 	    canvas.height = data.shape[0];
 	    var ctx = canvas.getContext('2d');
+	    options = options || {};
 	    var debug = options.debug || false;
 	
 	    var imgData = ctx.createImageData(canvas.width, canvas.height);
