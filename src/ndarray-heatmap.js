@@ -2,7 +2,7 @@ import ndarray from 'ndarray';
 import pack from 'ndarray-pack';
 import {extent} from 'd3-array';
 import colorbrewer from 'colorbrewer';
-import {makeColorScale} from './linear-gradient';
+import {makeColorScale} from 'linear-gradient-quantizer';
 import {interpolateLab} from 'd3-interpolate';
 import {scaleLinear} from 'd3-scale';
 import {rgb} from 'd3-color';
@@ -61,28 +61,6 @@ function heatmap() {
     return typedArr;
   }
 
-  function fillColorScale(range, steps) {
-    if (range.length >= 2) {
-      let colors = [];
-      let stops = [];
-      let l = range.length;
-      let s = steps - 1;
-      for (let i = 0; i < l; i++) {
-        stops.push((s) * i / (l - 1));
-      }
-      let colorScale = scaleLinear()
-        .domain(stops)
-        .range(range)
-        .interpolate(interpolateLab);
-      for (let i = 0; i < steps; ++i) {
-        colors.push(rgb(colorScale(i)));
-      }
-      return colors;
-    } else {
-      return false;
-    }
-  }
-
   function timeFn(runTimer, fn, logFn, data) {
 
     if (runTimer) {
@@ -101,6 +79,7 @@ function heatmap() {
     canvas.height = data.shape[0];
     let ctx = canvas.getContext('2d');
     options = options || {};
+    options.gradient = options.gradient || {};
     let debug = options.debug || false;
 
     let imgData = ctx.createImageData(canvas.width, canvas.height);
@@ -114,16 +93,13 @@ function heatmap() {
     let [min, max] = domain || extent(data.data);
     var colors;
 
-    if (typeof makeColorScale === 'function') {
-      colors = makeColorScale(colorRange, colorSteps, options.gradient);
-      if (options.gradient.debug > 1) console.log(colors);
-    } else {
-      colors = fillColorScale(colorRange, colorSteps);
-    }
+    colors = makeColorScale(colorRange, colorSteps, options.gradient);
+    if (options.gradient.debug > 1) console.log(colors);
 
     if (!colors) {
       return false;
     }
+
     let colorTable = buildColorTable(colors);
     timeFn(
       debug > 0,

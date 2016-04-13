@@ -70,6 +70,7 @@
     "d3-interpolate": "^0.7.0",
     "d3-scale": "^0.6.4",
     "ndarray": "^1.0.18",
-    "ndarray-pack": "^1.2.0"
+    "ndarray-pack": "^1.2.0",
+    "linear-gradient-quantizer": "https://github.com/mxfh/linear-gradient-quantizer.git"
   }
 }
